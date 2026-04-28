@@ -1,0 +1,151 @@
+{
+  "theme": "dark",
+  "archetype": "5 (Jewel & Luxury)",
+  "vibe": "High-stakes lounge meets professional fintech dashboard. Premium, deep, and highly functional for rapid poker operations.",
+  "language": "pt-BR",
+  "currency": "BRL",
+  "colors": {
+    "background": {
+      "base": "#0A0B0E",
+      "surface": "#12141A",
+      "surface_elevated": "#1A1D24",
+      "glass": "rgba(18, 20, 26, 0.7)"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#94A3B8",
+      "disabled": "#475569",
+      "accent": "#F59E0B"
+    },
+    "primary": {
+      "default": "#D4AF37",
+      "hover": "#FCD34D",
+      "active": "#B48F22",
+      "foreground": "#0A0B0E"
+    },
+    "secondary": {
+      "default": "#1E293B",
+      "hover": "#334155",
+      "foreground": "#F8FAFC"
+    },
+    "success": {
+      "default": "#059669",
+      "hover": "#10B981",
+      "foreground": "#FFFFFF",
+      "background_subtle": "rgba(5, 150, 105, 0.1)"
+    },
+    "danger": {
+      "default": "#991B1B",
+      "hover": "#DC2626",
+      "foreground": "#FFFFFF",
+      "background_subtle": "rgba(153, 27, 27, 0.1)"
+    },
+    "warning": {
+      "default": "#D97706",
+      "hover": "#F59E0B",
+      "foreground": "#FFFFFF"
+    },
+    "border": {
+      "subtle": "rgba(255, 255, 255, 0.05)",
+      "default": "rgba(255, 255, 255, 0.1)",
+      "strong": "rgba(255, 255, 255, 0.2)"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Outfit, sans-serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "sizes": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "h4": "text-lg font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-secondary",
+      "tiny": "text-xs uppercase tracking-[0.2em]"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Control Room Grid for density with generous padding inside cards. Mobile-first but heavily optimized for tablet/desktop used in salons.",
+    "container_padding": "p-4 sm:p-6 lg:p-8",
+    "grid_gap": "gap-4 sm:gap-6",
+    "card_padding": "p-5 sm:p-6",
+    "border_radius": {
+      "card": "rounded-xl",
+      "button": "rounded-lg",
+      "input": "rounded-md"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all active:scale-95 font-semibold",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary-hover transition-all active:scale-95 border border-border-default",
+      "danger": "bg-danger text-danger-foreground hover:bg-danger-hover transition-all shadow-md shadow-danger/20",
+      "ghost": "hover:bg-white/5 text-secondary hover:text-primary transition-all"
+    },
+    "cards": {
+      "dashboard_widget": "bg-surface border border-border-subtle rounded-xl p-5 shadow-sm hover:border-border-default hover:-translate-y-0.5 transition-transform flex flex-col",
+      "glass_panel": "backdrop-blur-xl bg-glass border border-border-default shadow-[0_8px_32px_rgba(0,0,0,0.4)] rounded-xl"
+    },
+    "inputs": {
+      "default": "bg-surface-elevated border border-border-default rounded-md px-4 py-2 text-primary focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-disabled",
+      "search": "pl-10 rounded-full bg-surface-elevated border-none focus:ring-1 focus:ring-primary"
+    },
+    "tables": {
+      "container": "w-full overflow-hidden rounded-xl border border-border-subtle bg-surface",
+      "header": "bg-surface-elevated text-tiny text-secondary py-3 px-4 text-left border-b border-border-subtle",
+      "row": "border-b border-border-subtle hover:bg-white/5 transition-colors",
+      "cell": "py-3 px-4 text-sm align-middle"
+    },
+    "badges": {
+      "success": "bg-success-background_subtle text-success-hover border border-success/20 rounded-full px-2.5 py-0.5 text-xs font-medium",
+      "danger": "bg-danger-background_subtle text-danger-hover border border-danger/20 rounded-full px-2.5 py-0.5 text-xs font-medium",
+      "warning": "bg-warning/10 text-warning border border-warning/20 rounded-full px-2.5 py-0.5 text-xs font-medium"
+    }
+  },
+  "motion": {
+    "hover": "transition-all duration-200 ease-in-out",
+    "page_enter": "animate-in fade-in slide-in-from-bottom-4 duration-500",
+    "modal_enter": "animate-in zoom-in-95 fade-in duration-200"
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1626200492328-cb7f48fe6adc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHwyfHxwb2tlciUyMGNoaXBzJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzc3NDIwMTE5fDA&ixlib=rb-4.1.0&q=85",
+        "category": "background",
+        "description": "Playing cards with dark luxury background. Useful for login screen or empty state hero."
+      },
+      {
+        "url": "https://images.pexels.com/photos/105470/pexels-photo-105470.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "hero",
+        "description": "Vibrant stacks of casino chips on dark table. Good for dashboard headers or module illustrations."
+      },
+      {
+        "url": "https://images.pexels.com/photos/29261090/pexels-photo-29261090.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "cash_game_banner",
+        "description": "Stacks of colorful poker chips on a green table ready for a game. Use for Cash Game module headers."
+      }
+    ]
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Use stroke-width 1.5 for a premium, delicate look. Icons should be sized 16px to 24px."
+  },
+  "accessibility": {
+    "focus_ring": "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "contrast": "Ensure all text meets minimum 4.5:1 ratio. The primary gold/amber on dark background is highly accessible.",
+    "testid_convention": "All interactive elements MUST have data-testid attributes (e.g., data-testid='login-submit-button', data-testid='player-rebuy-action')."
+  },
+  "instructions_to_main_agent": [
+    "Use Tailwind CSS for all styling.",
+    "Implement a dark theme layout globally (no light mode toggle required, default to dark).",
+    "For UI components like Dialogs, Tabs, Selects, and Tables, heavily utilize Shadcn UI. Customize their styling to match the provided colors and dark luxury vibe.",
+    "Do NOT use HTML <select> or native <input type='date'>; use Shadcn equivalents.",
+    "Use Recharts for financial dashboard charts. Ensure chart colors map to the provided success (green) and danger (red) hex codes.",
+    "Build a sidebar layout for navigation. The sidebar should use the glass panel style or a solid elevated surface (#1A1D24).",
+    "Add data-testid attributes to all buttons, inputs, links, and key metric displays.",
+    "Ensure quick actions (Buy-in, Rebuy, Add-on) have prominent CTA buttons (using the primary amber/gold color) in the Tournament/Cashier views."
+  ]
+}
