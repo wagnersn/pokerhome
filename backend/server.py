@@ -192,6 +192,7 @@ class ChargeOut(BaseModel):
     payment_status: Literal["pending", "paid", "on_debt"] = "pending"
     payment_method: Optional[str] = None
     description: Optional[str] = None
+    tournament_name: Optional[str] = None
     created_at: str
 
 
@@ -932,6 +933,38 @@ async def set_prize_distribution(tid: str, body: PrizeDistributionIn, _: dict = 
 @api.get("/cashier/pending")
 async def cashier_pending(_: dict = Depends(get_current_user)):
     charges = await db.charges.find({"payment_status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    
+    t_ids = list(set(c["tournament_id"] for c in charges if c.get("tournament_id")))
+    tournaments = await db.tournaments.find({"id": {"$in": t_ids}}, {"id": 1, "name": 1}).to_list(2000)
+    t_map = {t["id"]: t["name"] for t in tournaments}
+    
+    for c in charges:
+        if c.get("tournament_id"):
+            c["tournament_name"] = t_map.get(c["tournament_id"])
+        else:
+            c["tournament_name"] = "Cash Game"
+            
+    return charges
+
+
+@api.get("/cashier/players/{player_id}/charges")
+async def player_charges(player_id: str, _: dict = Depends(get_current_user)):
+    # Retorna tanto pendentes quanto fiados para cobrança no caixa
+    charges = await db.charges.find(
+        {"player_id": player_id, "payment_status": {"$in": ["pending", "on_debt"]}}, 
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    t_ids = list(set(c["tournament_id"] for c in charges if c.get("tournament_id")))
+    tournaments = await db.tournaments.find({"id": {"$in": t_ids}}, {"id": 1, "name": 1}).to_list(500)
+    t_map = {t["id"]: t["name"] for t in tournaments}
+    
+    for c in charges:
+        if c.get("tournament_id"):
+            c["tournament_name"] = t_map.get(c["tournament_id"])
+        else:
+            c["tournament_name"] = "Cash Game"
+            
     return charges
 
 

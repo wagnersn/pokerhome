@@ -53,6 +53,7 @@ export default function Cashier() {
             <Tabs value={tab} onValueChange={setTab}>
                 <TabsList className="bg-surface border border-white/5">
                     <TabsTrigger value="pending" data-testid="tab-pending">Pendentes ({pending.length})</TabsTrigger>
+                    <TabsTrigger value="by-player" data-testid="tab-by-player">Por Jogador</TabsTrigger>
                     <TabsTrigger value="debt" data-testid="tab-debt">Dívidas ({debtors.length})</TabsTrigger>
                     <TabsTrigger value="cash" data-testid="tab-cash">Venda de Fichas</TabsTrigger>
                     <TabsTrigger value="history" data-testid="tab-history">Histórico</TabsTrigger>
@@ -60,6 +61,10 @@ export default function Cashier() {
 
                 <TabsContent value="pending" className="mt-6">
                     <PendingPanel pending={pending} pay={pay} />
+                </TabsContent>
+
+                <TabsContent value="by-player" className="mt-6">
+                    <PlayerChargesPanel players={players} pay={pay} />
                 </TabsContent>
 
                 <TabsContent value="debt" className="mt-6">
@@ -88,24 +93,26 @@ const PendingPanel = ({ pending, pay }) => (
             <thead>
                 <tr className="bg-surface-elevated text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                     <th className="text-left py-3 px-4">Jogador</th>
-                    <th className="text-left py-3 px-4 hidden md:table-cell">Descrição</th>
+                    <th className="text-left py-3 px-4 hidden md:table-cell">Torneio / Origem</th>
+                    <th className="text-left py-3 px-4 hidden lg:table-cell">Descrição</th>
                     <th className="text-right py-3 px-4">Valor</th>
                     <th className="text-right py-3 px-4">Quitar</th>
                 </tr>
             </thead>
             <tbody>
-                {pending.length === 0 && <tr><td colSpan={4} className="text-center py-12 text-muted-foreground">Nenhuma cobrança pendente.</td></tr>}
+                {pending.length === 0 && <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Nenhuma cobrança pendente.</td></tr>}
                 {pending.map((c) => (
                     <tr key={c.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                         <td className="py-3 px-4 font-medium">{c.player_name}</td>
-                        <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{c.description || c.type} · <span className="text-xs">{fmtDateTime(c.created_at)}</span></td>
+                        <td className="py-3 px-4 font-semibold text-primary">{c.tournament_name || "—"}</td>
+                        <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">{c.description || c.type} · <span className="text-xs">{fmtDateTime(c.created_at)}</span></td>
                         <td className="py-3 px-4 text-right font-mono font-semibold">{fmtBRL(c.amount)}</td>
                         <td className="py-3 px-4">
                             <div className="flex items-center justify-end gap-1 flex-wrap">
-                                <PayBtn label="Dinheiro" icon={Banknote} onClick={() => pay(c.id, "cash")} testid={`pay-cash-${c.id}`} />
-                                <PayBtn label="PIX" icon={Coins} onClick={() => pay(c.id, "pix")} testid={`pay-pix-${c.id}`} />
-                                <PayBtn label="Cartão" icon={CreditCard} onClick={() => pay(c.id, "card")} testid={`pay-card-${c.id}`} />
-                                <PayBtn label="Fiado" icon={AlertTriangle} onClick={() => pay(c.id, "debt")} testid={`pay-debt-${c.id}`} accent="warning" />
+                                <PayBtn label="Dinheiro" icon={Banknote} onClick={() => pay(c.id, "cash")} />
+                                <PayBtn label="PIX" icon={Coins} onClick={() => pay(c.id, "pix")} />
+                                <PayBtn label="Cartão" icon={CreditCard} onClick={() => pay(c.id, "card")} />
+                                <PayBtn label="Fiado" icon={AlertTriangle} onClick={() => pay(c.id, "debt")} accent="warning" />
                             </div>
                         </td>
                     </tr>
@@ -114,6 +121,111 @@ const PendingPanel = ({ pending, pay }) => (
         </table>
     </div>
 );
+
+const PlayerChargesPanel = ({ players, pay }) => {
+    const [selectedPid, setSelectedPid] = useState("");
+    const [playerCharges, setPlayerCharges] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!selectedPid) {
+            setPlayerCharges([]);
+            return;
+        }
+        const loadPlayerCharges = async () => {
+            setLoading(true);
+            try {
+                const res = await api.get(`/cashier/players/${selectedPid}/charges`);
+                setPlayerCharges(res.data);
+            } catch (e) {
+                toast.error("Erro ao buscar cobranças do jogador");
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadPlayerCharges();
+    }, [selectedPid]);
+
+    const handlePay = async (cid, method) => {
+        await pay(cid, method);
+        // Refresh local list
+        const res = await api.get(`/cashier/players/${selectedPid}/charges`);
+        setPlayerCharges(res.data);
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="rounded-2xl bg-surface border border-white/5 p-6 max-w-xl">
+                <Label className="text-xs uppercase tracking-widest text-muted-foreground mb-2 block">Selecionar Jogador</Label>
+                <Select value={selectedPid} onValueChange={setSelectedPid}>
+                    <SelectTrigger className="bg-surface-elevated border-white/10 h-12 text-lg"><SelectValue placeholder="Busque o jogador..." /></SelectTrigger>
+                    <SelectContent>
+                        {players.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            {selectedPid && (
+                <div className="rounded-2xl bg-surface border border-white/5 overflow-hidden animate-fade-in">
+                    <div className="p-5 border-b border-white/5 flex items-center justify-between bg-primary/5">
+                        <h3 className="font-heading text-lg font-semibold flex items-center gap-2">
+                            <ReceiptText className="size-4 text-primary" /> 
+                            Contas de {players.find(p => p.id === selectedPid)?.name}
+                        </h3>
+                        <div className="text-sm font-mono bg-surface px-3 py-1 rounded-full border border-white/5">
+                            Subtotal: <span className="font-bold text-primary">{fmtBRL(playerCharges.reduce((s, c) => s + c.amount, 0))}</span>
+                        </div>
+                    </div>
+                    
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="bg-surface-elevated text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                <th className="text-left py-3 px-4">Torneio / Origem</th>
+                                <th className="text-left py-3 px-4">Descrição</th>
+                                <th className="text-left py-3 px-4">Status</th>
+                                <th className="text-right py-3 px-4">Valor</th>
+                                <th className="text-right py-3 px-4">Quitar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading && <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Carregando...</td></tr>}
+                            {!loading && playerCharges.length === 0 && (
+                                <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Nenhuma conta pendente para este jogador.</td></tr>
+                            )}
+                            {playerCharges.map((c) => (
+                                <tr key={c.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                                    <td className="py-3 px-4 font-semibold text-primary">{c.tournament_name || "—"}</td>
+                                    <td className="py-3 px-4 text-muted-foreground">
+                                        {c.description || c.type} <br/>
+                                        <span className="text-[10px] opacity-50">{fmtDateTime(c.created_at)}</span>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        {c.payment_status === "on_debt" ? (
+                                            <span className="px-2 py-0.5 rounded bg-destructive/10 text-destructive text-[10px] font-bold uppercase">FIADO</span>
+                                        ) : (
+                                            <span className="px-2 py-0.5 rounded bg-warning/10 text-warning text-[10px] font-bold uppercase">PENDENTE</span>
+                                        )}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-semibold">{fmtBRL(c.amount)}</td>
+                                    <td className="py-3 px-4">
+                                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                                            <PayBtn label="Dinheiro" icon={Banknote} onClick={() => handlePay(c.id, "cash")} />
+                                            <PayBtn label="PIX" icon={Coins} onClick={() => handlePay(c.id, "pix")} />
+                                            <PayBtn label="Cartão" icon={CreditCard} onClick={() => handlePay(c.id, "card")} />
+                                            {c.payment_status !== "on_debt" && (
+                                                <PayBtn label="Fiado" icon={AlertTriangle} onClick={() => handlePay(c.id, "debt")} accent="warning" />
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const DebtPanel = ({ debtors, reload }) => {
     const [open, setOpen] = useState(false);
@@ -277,10 +389,9 @@ const HistoryPanel = ({ transactions }) => (
     </div>
 );
 
-const PayBtn = ({ icon: Icon, label, onClick, accent = "primary", testid }) => (
+const PayBtn = ({ icon: Icon, label, onClick, accent = "primary" }) => (
     <button
         onClick={onClick}
-        data-testid={testid}
         title={label}
         className={`px-2.5 py-1.5 rounded-md text-xs font-medium border flex items-center gap-1.5 transition-colors bg-${accent}/10 border-${accent}/30 text-${accent} hover:bg-${accent}/20`}
     >
