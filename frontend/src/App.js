@@ -1,54 +1,71 @@
-import { useEffect } from "react";
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import "@/index.css";
+import { AuthProvider } from "@/context/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AppLayout } from "@/components/AppLayout";
+import { Toaster } from "@/components/ui/sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import Login from "@/pages/Login";
+import Dashboard from "@/pages/Dashboard";
+import Players from "@/pages/Players";
+import PlayerProfile from "@/pages/PlayerProfile";
+import Tournaments from "@/pages/Tournaments";
+import TournamentDetail from "@/pages/TournamentDetail";
+import Rankings from "@/pages/Rankings";
+import Cashier from "@/pages/Cashier";
+import CashGames from "@/pages/CashGames";
+import PointStructures from "@/pages/PointStructures";
+import Users from "@/pages/Users";
 
 function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
-  );
+    return (
+        <div className="App dark">
+            <AuthProvider>
+                <BrowserRouter>
+                    <Routes>
+                        <Route path="/login" element={<Login />} />
+                        <Route
+                            element={
+                                <ProtectedRoute>
+                                    <AppLayout />
+                                </ProtectedRoute>
+                            }
+                        >
+                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/jogadores" element={<Players />} />
+                            <Route path="/jogadores/:id" element={<PlayerProfile />} />
+                            <Route path="/torneios" element={<Tournaments />} />
+                            <Route path="/torneios/:id" element={<TournamentDetail />} />
+                            <Route path="/ranking" element={<Rankings />} />
+                            <Route path="/caixa" element={<Cashier />} />
+                            <Route path="/cash-games" element={<CashGames />} />
+                            <Route
+                                path="/pontuacao"
+                                element={
+                                    <ProtectedRoute adminOnly>
+                                        <PointStructures />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/usuarios"
+                                element={
+                                    <ProtectedRoute adminOnly>
+                                        <Users />
+                                    </ProtectedRoute>
+                                }
+                            />
+                        </Route>
+                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    </Routes>
+                </BrowserRouter>
+                <Toaster richColors position="top-right" theme="dark" />
+            </AuthProvider>
+        </div>
+    );
 }
 
 export default App;

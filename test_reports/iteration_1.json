@@ -1,0 +1,47 @@
+{
+  "summary": "Comprehensive backend regression suite (32 pytest tests) + frontend smoke. 31/32 backend tests pass. Critical flows verified: auth (admin+operator), players CRUD, point structures, tournaments + entries with rebuy/addon/super_addon/bonus, charge totals (buy-in 120, full 380), summary (gross/rake/prize_pool), prize distribution, cashier (cash + debt + debt_payment reduction), debt-block on entry creation (409) and allow_debt bypass, cash tables full lifecycle (open/seat clamp/waitlist/close), rankings (with filter), dashboard summary + revenue, RBAC for admin-only mutations. Frontend login, navigation, BRL pt-BR formatting, and operator RBAC nav hiding all working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "Brute-force lockout (429 after 5 fails) NOT triggering when accessed via public preview URL. After 7 consecutive failed attempts with same email, all responses returned 401 — none 429. Root cause: rate-limit identifier is built from request.client.host which behind k8s/ingress is the immediate proxy IP and likely varies per request (so identifier is not stable). Fix: parse X-Forwarded-For header (or trust proxy and use forwarded chain) to derive a stable client IP; alternatively key the lockout solely by email."},
+      {"endpoint": "CORS middleware", "issue": "CORS_ORIGINS='*' combined with allow_credentials=True is invalid per spec — browsers will reject Set-Cookie/withCredentials when Access-Control-Allow-Origin is '*'. It happens to work today only because both apps are served from the same origin; if the FE is ever hit cross-origin, cookies will fail. Fix: set CORS_ORIGINS to explicit origin (FRONTEND_URL is already in .env)."},
+      {"endpoint": "PUT /api/tournaments/{tid}/prize-distribution", "issue": "Implementation calls tournament_summary(tid) directly without the user dependency arg; works because the unused _ parameter receives a Depends sentinel and is never read. Fragile — extract a private async helper to compute totals and reuse it in both the endpoint and prize-distribution."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Rankings (/ranking)", "issues": ["Date range inputs use the browser's NATIVE date picker (mm/dd/yyyy placeholder). Per design guidelines and pt-BR locale, replace with shadcn Calendar/DatePicker component using dd/mm/yyyy display."]},
+      {"screen": "Dashboard", "issues": ["Recharts ResponsiveContainer logs width(-1)/height(-1) warnings on initial mount. Functional but noisy console — set explicit minHeight on the chart wrapper."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix brute-force lockout: derive client IP from X-Forwarded-For (or key on email alone) so rate limit actually triggers behind ingress.",
+    "Tighten CORS: set CORS_ORIGINS to the explicit FRONTEND_URL when allow_credentials=True (current '*' is unsafe and spec-invalid).",
+    "Replace native HTML date inputs in Rankings with shadcn Calendar (pt-BR dd/mm/yyyy).",
+    "Refactor prize-distribution endpoint to use an internal helper instead of calling the public tournament_summary route function."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1116 lines — split into routers/{auth,players,tournaments,cashier,cash_tables,rankings,dashboard}.py for maintainability.",
+    "tournament_summary is invoked as a plain function from set_prize_distribution; the dependency parameter is bypassed. Use a private async function.",
+    "_recalc_entry uses Python sum on float charges — fine for now but consider Decimal for monetary precision.",
+    "No pagination on list endpoints (.to_list(2000/5000)); will not scale.",
+    "secure=True, samesite='none' cookies require HTTPS — OK for preview, but document this for self-hosted setups.",
+    "login_attempts collection has no TTL index — entries live forever. Add a TTL (e.g., 30 min) on created_at after migrating it to a Date type."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "97% (31/32)", "frontend": "100% smoke"},
+  "test_credentials": "admin@poker.com/admin123, caixa@poker.com/caixa123 — both working.",
+  "seed_data_creation": "Tests create TEST_-prefixed players/tournaments/tables and tear them down. Persisted residual data may exist if a test crashes mid-run; safe because of TEST_ prefix.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/backend_test.py is comprehensive — re-run with `pytest /app/backend/tests/backend_test.py -v`. Frontend smoke verified login + nav + RBAC. The single remaining backend failure (brute-force lockout) requires a server-side fix (X-Forwarded-For). Did NOT do deep frontend e2e (creating tournament UI flow, rebuy/addon clicks, paying charges through the Cashier UI) — recommended next.",
+  "rca of the issue": "Brute-force lockout: identifier = f\"{ip}:{email}\" with ip=request.client.host. Behind kubernetes ingress, the upstream client.host the FastAPI app sees is the in-cluster proxy address which can rotate between requests (or be the same but with X-Real-IP varying). The login_attempts inserts then carry different identifiers for each request, so count_documents per identifier never reaches 5. Mitigation: read X-Forwarded-For first hop (or simply key the throttle by email to be safe even without forwarded headers)."
+}
