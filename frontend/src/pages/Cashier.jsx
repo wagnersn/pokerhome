@@ -20,17 +20,19 @@ export default function Cashier() {
     const [pending, setPending] = useState([]);
     const [debtors, setDebtors] = useState([]);
     const [transactions, setTransactions] = useState([]);
+    const [prizes, setPrizes] = useState([]);
     const [players, setPlayers] = useState([]);
     const [tab, setTab] = useState("pending");
 
     const load = async () => {
-        const [a, b, c, d] = await Promise.all([
+        const [a, b, c, d, e] = await Promise.all([
             api.get("/cashier/pending"),
             api.get("/cashier/debtors"),
             api.get("/cashier/transactions?limit=100"),
             api.get("/players"),
+            api.get("/cashier/unpaid-prizes"),
         ]);
-        setPending(a.data); setDebtors(b.data); setTransactions(c.data); setPlayers(d.data);
+        setPending(a.data); setDebtors(b.data); setTransactions(c.data); setPlayers(d.data); setPrizes(e.data);
     };
     useEffect(() => { load(); }, []);
 
@@ -53,6 +55,7 @@ export default function Cashier() {
             <Tabs value={tab} onValueChange={setTab}>
                 <TabsList className="bg-surface border border-white/5">
                     <TabsTrigger value="pending" data-testid="tab-pending">Pendentes ({pending.length})</TabsTrigger>
+                    <TabsTrigger value="prizes" data-testid="tab-prizes">Prêmios ({prizes.length})</TabsTrigger>
                     <TabsTrigger value="by-player" data-testid="tab-by-player">Por Jogador</TabsTrigger>
                     <TabsTrigger value="debt" data-testid="tab-debt">Dívidas ({debtors.length})</TabsTrigger>
                     <TabsTrigger value="cash" data-testid="tab-cash">Venda de Fichas</TabsTrigger>
@@ -61,6 +64,10 @@ export default function Cashier() {
 
                 <TabsContent value="pending" className="mt-6">
                     <PendingPanel pending={pending} pay={pay} />
+                </TabsContent>
+
+                <TabsContent value="prizes" className="mt-6">
+                    <PrizePanel prizes={prizes} reload={load} />
                 </TabsContent>
 
                 <TabsContent value="by-player" className="mt-6">
@@ -313,6 +320,56 @@ const DebtPanel = ({ debtors, reload }) => {
         </>
     );
 };
+
+const PrizePanel = ({ prizes, reload }) => {
+    const pay = async (p, method) => {
+        try {
+            await api.post("/cashier/prizes/pay", { ...p, method });
+            toast.success("Pagamento de prêmio registrado");
+            reload();
+        } catch (e) { toast.error(apiErr(e)); }
+    };
+
+    return (
+        <div className="rounded-2xl bg-surface border border-white/5 overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-primary/5">
+                <h3 className="font-heading text-lg font-semibold flex items-center gap-2"><Trophy className="size-4 text-primary" /> Premiações a pagar</h3>
+                <div className="text-sm font-mono">Total pendente: <span className="font-bold text-primary">{fmtBRL(prizes.reduce((s, p) => s + p.amount, 0))}</span></div>
+            </div>
+            <table className="w-full text-sm">
+                <thead>
+                    <tr className="bg-surface-elevated text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        <th className="text-left py-3 px-4">Jogador</th>
+                        <th className="text-left py-3 px-4">Torneio</th>
+                        <th className="text-center py-3 px-4">Posição</th>
+                        <th className="text-right py-3 px-4">Prêmio</th>
+                        <th className="text-right py-3 px-4">Pagar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {prizes.length === 0 && <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Nenhuma premiação pendente.</td></tr>}
+                    {prizes.map((p) => (
+                        <tr key={p.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                            <td className="py-3 px-4 font-medium">{p.player_name}</td>
+                            <td className="py-3 px-4 text-muted-foreground">{p.tournament_name}</td>
+                            <td className="py-3 px-4 text-center">
+                                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">#{p.position}</span>
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-bold text-primary">{fmtBRL(p.amount)}</td>
+                            <td className="py-3 px-4">
+                                <div className="flex items-center justify-end gap-1">
+                                    <PayBtn label="Dinheiro" icon={Banknote} onClick={() => pay(p, "cash")} />
+                                    <PayBtn label="PIX" icon={Coins} onClick={() => pay(p, "pix")} />
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
 
 const CashSalePanel = ({ players, reload }) => {
     const [pid, setPid] = useState("");

@@ -6,8 +6,52 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trophy, Filter, Crown } from "lucide-react";
+import { Trophy, Filter, Crown, Calendar as CalendarIcon } from "lucide-react";
 import { fmtNumber } from "@/lib/format";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+function DatePicker({ date, setDate, placeholder = "Selecione" }) {
+  const selectedDate = date ? new Date(date + "T12:00:00") : undefined;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant={"outline"}
+          className={cn(
+            "w-full justify-start text-left font-normal bg-surface-elevated border-white/10 hover:bg-white/5",
+            !date && "text-muted-foreground"
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : <span>{placeholder}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0 bg-surface-elevated border-white/10" align="start">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(d) => {
+            if (d) {
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                setDate(`${year}-${month}-${day}`);
+            } else {
+                setDate("");
+            }
+          }}
+          initialFocus
+          locale={ptBR}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function Rankings() {
     const [tournaments, setTournaments] = useState([]);
@@ -77,11 +121,11 @@ export default function Rankings() {
                     )}
                     <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-widest text-muted-foreground">De</Label>
-                        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="bg-surface-elevated border-white/10" data-testid="filter-from-date" />
+                        <DatePicker date={from} setDate={setFrom} />
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-widest text-muted-foreground">Até</Label>
-                        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="bg-surface-elevated border-white/10" data-testid="filter-to-date" />
+                        <DatePicker date={to} setDate={setTo} />
                     </div>
                     <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-widest text-muted-foreground" title="Exclui as piores pontuações do jogador">Descartes</Label>

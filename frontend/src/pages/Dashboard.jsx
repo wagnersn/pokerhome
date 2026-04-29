@@ -68,7 +68,7 @@ export default function Dashboard() {
                         <div className="text-sm text-muted-foreground font-mono">{fmtBRL(revenue.reduce((s, r) => s + r.revenue, 0))}</div>
                     </div>
                     <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minHeight={288}>
                             <AreaChart data={revenue}>
                                 <defs>
                                     <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">

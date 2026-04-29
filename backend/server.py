@@ -44,6 +44,14 @@ def iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
+def get_client_ip(request: Request) -> str:
+    # Favor headers from proxies/load balancers
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def gen_id() -> str:
     return str(uuid.uuid4())
 
@@ -296,8 +304,9 @@ async def on_startup():
     await db.charges.create_index("id", unique=True)
     await db.charges.create_index([("entry_id", 1)])
     await db.charges.create_index([("payment_status", 1)])
-    await db.transactions.create_index("id", unique=True)
     await db.transactions.create_index("created_at")
+    await db.login_attempts.create_index("created_at", expireAfterSeconds=1800)
+    logger.info("MongoDB indexes created")
     await db.cash_tables.create_index("id", unique=True)
     await db.waitlist.create_index("id", unique=True)
     await db.point_structures.create_index("id", unique=True)
@@ -377,20 +386,26 @@ async def login(body: LoginIn, response: Response, request: Request):
     identifier = f"email:{email}"
 
     # Brute force: 5 attempts in 15 min
-    cutoff = now_utc() - timedelta(minutes=15)
-    attempts = await db.login_attempts.count_documents({
-        "identifier": identifier,
-        "created_at": {"$gte": iso(cutoff)},
+    ip = get_client_ip(request)
+    recent_fails = await db.login_attempts.count_documents({
+        "ip": ip, "email": body.email, "success": False,
+        "created_at": {"$gt": now_utc() - timedelta(minutes=15)}
     })
-    if attempts >= 5:
+    if recent_fails >= 5:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em 15 minutos.")
 
-    user = await db.users.find_one({"email": email})
-    if not user or not verify_password(body.password, user.get("password_hash", "")):
-        await db.login_attempts.insert_one({"identifier": identifier, "created_at": iso(now_utc())})
+    user = await db.users.find_one({"email": body.email})
+    success = False
+    if user and verify_password(body.password, user.get("password_hash", "")):
+        success = True
+
+    await db.login_attempts.insert_one({
+        "email": body.email, "ip": ip, "success": success, "created_at": now_utc()
+    })
+
+    if not success:
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos")
 
-    await db.login_attempts.delete_many({"identifier": identifier})
     token = create_access_token(user["id"], user["email"], user["role"])
     set_auth_cookie(response, token)
     return {
@@ -875,8 +890,7 @@ async def delete_entry(entry_id: str, _: dict = Depends(require_admin)):
     return {"ok": True}
 
 
-@api.get("/tournaments/{tid}/summary")
-async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
+async def _get_tournament_summary(tid: str):
     t = await db.tournaments.find_one({"id": tid}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Torneio não encontrado")
@@ -909,8 +923,6 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
 
     gross = sum(c["amount"] for c in charges)
     rake_per_entry = float(t.get("rake", 0))
-    # Rake é cobrado UMA VEZ por inscrição (no buy-in) — não recobrado em rebuys/addons.
-    # Independe de ser entrada simples ou dupla.
     total_rake = 0.0 if t.get("is_freeroll") else rake_per_entry * total_entries
     prize_pool = max(0.0, gross - total_rake)
 
@@ -945,9 +957,14 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
     }
 
 
+@api.get("/tournaments/{tid}/summary")
+async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
+    return await _get_tournament_summary(tid)
+
+
 @api.put("/tournaments/{tid}/prize-distribution")
 async def set_prize_distribution(tid: str, body: PrizeDistributionIn, _: dict = Depends(require_admin)):
-    summary = await tournament_summary(tid)  # type: ignore
+    summary = await _get_tournament_summary(tid)
     pp = summary["totals"]["prize_pool"]
     dist = []
     for item in body.distribution:
@@ -958,6 +975,65 @@ async def set_prize_distribution(tid: str, body: PrizeDistributionIn, _: dict = 
 
 
 # ---------- Cashier ----------
+@api.get("/cashier/unpaid-prizes")
+async def list_unpaid_prizes(_: dict = Depends(get_current_user)):
+    # Finalized tournaments with prize distribution
+    tournaments = await db.tournaments.find({
+        "status": "finalized",
+        "prize_distribution": {"$exists": True, "$ne": []}
+    }).sort("created_at", -1).to_list(100)
+    
+    unpaid = []
+    for t in tournaments:
+        for dist_item in t.get("prize_distribution", []):
+            pos = dist_item.get("position")
+            entry = await db.entries.find_one({"tournament_id": t["id"], "final_position": pos})
+            if entry:
+                # Check if already paid (expense transaction with specific description)
+                tx = await db.transactions.find_one({
+                    "type": "expense",
+                    "player_id": entry["player_id"],
+                    "description": {"$regex": f"Prêmio: {t['name']}"}
+                })
+                if not tx:
+                    unpaid.append({
+                        "id": f"{t['id']}_{pos}",
+                        "tournament_id": t["id"],
+                        "tournament_name": t["name"],
+                        "player_id": entry["player_id"],
+                        "player_name": entry["player_name"],
+                        "position": pos,
+                        "amount": dist_item["amount"],
+                        "entry_id": entry["id"]
+                    })
+    return unpaid
+
+
+@api.post("/cashier/prizes/pay")
+async def pay_prize(payload: dict = Body(...), _: dict = Depends(require_admin)):
+    tid = payload.get("tournament_id")
+    pid = payload.get("player_id")
+    amt = float(payload.get("amount", 0))
+    method = payload.get("method", "cash")
+    tname = payload.get("tournament_name", "Torneio")
+    pos = payload.get("position")
+
+    if not tid or not pid or amt <= 0:
+        raise HTTPException(400, "Dados inválidos")
+
+    await db.transactions.insert_one({
+        "id": gen_id(),
+        "type": "expense",
+        "player_id": pid,
+        "amount": amt,
+        "payment_method": method,
+        "description": f"Prêmio: {tname} (#{pos} lugar)",
+        "tournament_id": tid,
+        "created_at": iso(now_utc()),
+    })
+    return {"ok": True}
+
+
 @api.get("/cashier/pending")
 async def cashier_pending(_: dict = Depends(get_current_user)):
     charges = await db.charges.find({"payment_status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(2000)
@@ -1599,8 +1675,9 @@ _cors = os.environ.get("CORS_ORIGINS", "").strip()
 if _cors and _cors != "*":
     _origins = [o.strip() for o in _cors.split(",") if o.strip()]
 else:
+    # Strict mode: never allow * with credentials. Fallback to FRONTEND_URL or localhost
     _frontend = os.environ.get("FRONTEND_URL", "").strip()
-    _origins = [_frontend] if _frontend else ["http://localhost:3000"]
+    _origins = [_frontend] if (_frontend and _frontend != "*") else ["http://localhost:5173", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
