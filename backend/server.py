@@ -1423,11 +1423,11 @@ async def cashout_player(
         if rake_amt > 0:
             await db.transactions.insert_one({
                 "id": gen_id(),
-                "type": "income",
+                "type": "projection_rake",
                 "player_id": "house",
                 "amount": rake_amt,
                 "payment_method": "cash",
-                "description": f"Rake (Cash): {w['player_name']}",
+                "description": f"Projeção Rake (Auto): {w['player_name']}",
                 "session_id": wid,
                 "created_at": iso(now_utc()),
             })
@@ -1435,11 +1435,11 @@ async def cashout_player(
             await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": jackpot_amt}}, upsert=True)
             await db.transactions.insert_one({
                 "id": gen_id(),
-                "type": "jackpot_in",
+                "type": "projection_jackpot",
                 "player_id": "house",
                 "amount": jackpot_amt,
                 "payment_method": "cash",
-                "description": f"Jackpot (Cash): {w['player_name']}",
+                "description": f"Projeção Jackpot (Auto): {w['player_name']}",
                 "session_id": wid,
                 "created_at": iso(now_utc()),
             })
