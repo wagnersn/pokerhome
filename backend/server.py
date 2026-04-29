@@ -15,7 +15,7 @@ import jwt
 from datetime import datetime, timezone, timedelta, date
 from typing import List, Optional, Literal, Dict, Any
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, Query
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, Query, Body
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
@@ -202,6 +202,11 @@ class CashTableIn(BaseModel):
     small_blind: float
     big_blind: float
     max_seats: int = 9
+    bb_on_button: bool = False
+    rake_percent: float = 0.0
+    rake_cap: float = 0.0
+    jackpot_percent: float = 0.0
+    jackpot_cap: float = 0.0
 
 
 class CashTableOut(CashTableIn):
@@ -343,6 +348,13 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     client.close()
+    
+@api.get("/config")
+async def get_public_config():
+    return {
+        "house_name": os.environ.get("HOUSE_NAME", "Casa de Poker"),
+    }
+
 
 
 # ---------- Auth endpoints ----------
@@ -513,16 +525,33 @@ async def player_profile(player_id: str, _: dict = Depends(get_current_user)):
         total_won += prize
         total_points += float(e.get("points", 0))
         enriched.append(e)
+    # Add Cash Sessions
+    sessions = await db.waitlist.find({"player_id": player_id, "status": "finished"}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    total_cash_buyin = 0.0
+    total_cash_cashout = 0.0
+    for s in sessions:
+        session_charges = await db.charges.find({"session_id": s["id"]}).to_list(100)
+        buyin = sum(float(c.get("amount", 0)) for c in session_charges if c["type"] == "cash_buyin")
+        cashout = sum(float(c.get("amount", 0)) for c in session_charges if c["type"] == "cash_cashout")
+        s["buyin"] = buyin
+        s["cashout"] = cashout
+        s["result"] = cashout - buyin
+        total_cash_buyin += buyin
+        total_cash_cashout += cashout
+        table = await db.cash_tables.find_one({"id": s["table_id"]}, {"_id": 0, "name": 1})
+        s["table_name"] = table["name"] if table else "—"
+
     transactions = await db.transactions.find({"player_id": player_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {
         "player": p,
         "entries": enriched,
+        "cash_sessions": sessions,
         "transactions": transactions,
         "stats": {
             "total_entries": len(entries),
-            "total_spent": round(total_spent, 2),
-            "total_won": round(total_won, 2),
-            "roi": round(total_won - total_spent, 2),
+            "total_spent": round(total_spent + total_cash_buyin, 2),
+            "total_won": round(total_won + total_cash_cashout, 2),
+            "roi": round((total_won + total_cash_cashout) - (total_spent + total_cash_buyin), 2),
             "total_points": round(total_points, 2),
             "debt_balance": p.get("debt_balance", 0),
         },
@@ -610,8 +639,7 @@ async def update_tournament_status(tid: str, status: str = Query(...), _: dict =
 
 @api.delete("/tournaments/{tid}")
 async def delete_tournament(tid: str, _: dict = Depends(require_admin)):
-    if await db.entries.count_documents({"tournament_id": tid}):
-        raise HTTPException(400, "Torneio possui inscrições — finalize ou remova-as primeiro")
+    await db.entries.delete_many({"tournament_id": tid})
     await db.tournaments.delete_one({"id": tid})
     return {"ok": True}
 
@@ -1031,6 +1059,15 @@ async def list_transactions(limit: int = 200, _: dict = Depends(get_current_user
 @api.get("/cashier/debtors")
 async def list_debtors(_: dict = Depends(get_current_user)):
     docs = await db.players.find({"debt_balance": {"$gt": 0}}, {"_id": 0}).sort("debt_balance", -1).to_list(500)
+    for d in docs:
+        last_session = await db.waitlist.find_one({"player_id": d["id"], "status": "finished"}, sort=[("created_at", -1)])
+        if last_session:
+            session_charges = await db.charges.find({"session_id": last_session["id"]}).to_list(100)
+            buyin = sum(float(c.get("amount", 0)) for c in session_charges if c["type"] == "cash_buyin")
+            cashout = sum(float(c.get("amount", 0)) for c in session_charges if c["type"] == "cash_cashout")
+            d["last_session_result"] = cashout - buyin
+            d["last_session_buyin"] = buyin
+            d["last_session_cashout"] = cashout
     return docs
 
 
@@ -1073,9 +1110,39 @@ async def open_table(tid: str, _: dict = Depends(get_current_user)):
 
 
 @api.post("/cash-tables/{tid}/close")
-async def close_table(tid: str, _: dict = Depends(get_current_user)):
-    await db.cash_tables.update_one({"id": tid}, {"$set": {"status": "closed", "closed_at": iso(now_utc()), "seated_count": 0}})
-    await db.waitlist.update_many({"table_id": tid, "status": {"$in": ["waiting", "called"]}}, {"$set": {"status": "cancelled"}})
+async def close_table(tid: str, payload: dict = Body(None), _: dict = Depends(require_admin)):
+    payload = payload or {}
+    rake = float(payload.get("rake", 0))
+    jackpot = float(payload.get("jackpot", 0))
+    
+    await db.cash_tables.update_one({"id": tid}, {"$set": {"status": "closed", "rake_collected": rake, "jackpot_collected": jackpot}})
+    await db.waitlist.update_many({"table_id": tid}, {"$set": {"status": "cancelled"}})
+    
+    t = await db.cash_tables.find_one({"id": tid}, {"_id": 0})
+    name = t["name"] if t else "Mesa Cash"
+    
+    if rake > 0:
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "income",
+            "player_id": "house",
+            "amount": rake,
+            "payment_method": "cash",
+            "description": f"Rake: {name}",
+            "created_at": iso(now_utc()),
+        })
+    if jackpot > 0:
+        await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": jackpot}}, upsert=True)
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "jackpot_in",
+            "player_id": "house",
+            "amount": jackpot,
+            "payment_method": "cash",
+            "description": f"Jackpot: {name}",
+            "created_at": iso(now_utc()),
+        })
+        
     return {"ok": True}
 
 
@@ -1125,15 +1192,223 @@ async def add_waitlist(tid: str, player_id: str = Query(...), _: dict = Depends(
 
 
 @api.post("/waitlist/{wid}/status")
-async def update_waitlist_status(wid: str, status: str = Query(...), _: dict = Depends(get_current_user)):
+async def update_waitlist_status(
+    wid: str,
+    status: str = Query(...),
+    amount: float = Query(0),
+    method: str = Query("debt"),
+    _: dict = Depends(get_current_user)
+):
     if status not in ("waiting", "called", "seated", "cancelled"):
         raise HTTPException(400, "Status inválido")
     w = await db.waitlist.find_one({"id": wid}, {"_id": 0})
     if not w:
         raise HTTPException(404, "Item não encontrado")
+    
+    # If player is leaving the seat
+    if w["status"] == "seated" and status != "seated":
+        await db.cash_tables.update_one({"id": w["table_id"]}, {"$inc": {"seated_count": -1}})
+        
     await db.waitlist.update_one({"id": wid}, {"$set": {"status": status}})
-    if status == "seated":
+    
+    if status == "seated" and w["status"] != "seated":
         await db.cash_tables.update_one({"id": w["table_id"]}, {"$inc": {"seated_count": 1}})
+        if amount > 0:
+            charge_id = gen_id()
+            c_doc = {
+                "id": charge_id,
+                "table_id": w["table_id"],
+                "session_id": wid,
+                "player_id": w["player_id"],
+                "player_name": w["player_name"],
+                "type": "cash_buyin",
+                "amount": float(amount),
+                "payment_status": "on_debt" if method == "debt" else "paid",
+                "payment_method": method,
+                "description": "Entrada Cash Game",
+                "created_at": iso(now_utc()),
+            }
+            if method != "debt":
+                c_doc["settled_at"] = iso(now_utc())
+            await db.charges.insert_one(c_doc)
+            
+            if method == "debt":
+                await db.players.update_one({"id": w["player_id"]}, {"$inc": {"debt_balance": float(amount)}})
+                await db.transactions.insert_one({
+                    "id": gen_id(),
+                    "type": "debt_added",
+                    "player_id": w["player_id"],
+                    "amount": float(amount),
+                    "payment_method": "debt",
+                    "description": "Entrada Cash Game",
+                    "charge_id": charge_id,
+                    "session_id": wid,
+                    "created_at": iso(now_utc()),
+                })
+            else:
+                await db.transactions.insert_one({
+                    "id": gen_id(),
+                    "type": "income",
+                    "player_id": w["player_id"],
+                    "amount": float(amount),
+                    "payment_method": method,
+                    "description": "Entrada Cash Game",
+                    "charge_id": charge_id,
+                    "session_id": wid,
+                    "created_at": iso(now_utc()),
+                })
+    return {"ok": True}
+
+@api.post("/waitlist/{wid}/cashout")
+async def cashout_player(
+    wid: str,
+    amount: float = Query(...),
+    method: str = Query("debt"),
+    _: dict = Depends(get_current_user)
+):
+    w = await db.waitlist.find_one({"id": wid}, {"_id": 0})
+    if not w:
+        raise HTTPException(404, "Item não encontrado")
+    
+    # Get total buy-in for this session to calculate profit/loss
+    charges = await db.charges.find({"session_id": wid, "type": "cash_buyin"}).to_list(None)
+    total_buyin = sum(float(c.get("amount", 0)) for c in charges)
+    balance = float(amount) - total_buyin
+    
+    if w["status"] == "seated":
+        await db.cash_tables.update_one({"id": w["table_id"]}, {"$inc": {"seated_count": -1}})
+        
+    await db.waitlist.update_one({"id": wid}, {"$set": {"status": "finished"}})
+    
+    # Record the cashout record
+    charge_id = gen_id()
+    await db.charges.insert_one({
+        "id": charge_id,
+        "table_id": w["table_id"],
+        "session_id": wid,
+        "player_id": w["player_id"],
+        "player_name": w["player_name"],
+        "type": "cash_cashout",
+        "amount": float(amount),
+        "payment_status": "paid",
+        "payment_method": method,
+        "description": "Saída Cash Game",
+        "created_at": iso(now_utc()),
+    })
+
+    # Standard debt adjustment: decrease debt by cashout amount
+    # (Debt was increased by total_buyin when seated/rebuying)
+    await db.players.update_one({"id": w["player_id"]}, {"$inc": {"debt_balance": -float(amount)}})
+    
+    # Rake and Jackpot calculation (always accrual based on house's win)
+    if balance < 0:
+        house_win = abs(balance)
+        rake_amt = round(house_win * 0.7143, 2)
+        jackpot_amt = round(house_win * 0.2857, 2)
+        
+        if rake_amt > 0:
+            await db.transactions.insert_one({
+                "id": gen_id(),
+                "type": "income",
+                "player_id": "house",
+                "amount": rake_amt,
+                "payment_method": "cash",
+                "description": f"Rake (Cash): {w['player_name']}",
+                "session_id": wid,
+                "created_at": iso(now_utc()),
+            })
+        if jackpot_amt > 0:
+            await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": jackpot_amt}}, upsert=True)
+            await db.transactions.insert_one({
+                "id": gen_id(),
+                "type": "jackpot_in",
+                "player_id": "house",
+                "amount": jackpot_amt,
+                "payment_method": "cash",
+                "description": f"Jackpot (Cash): {w['player_name']}",
+                "session_id": wid,
+                "created_at": iso(now_utc()),
+            })
+
+    # If a settlement method (Cash/PIX) is used, record transaction and clear the session debt
+    if method != "debt":
+        if balance > 0:
+            # HOUSE PAYS PLAYER (Expense)
+            await db.transactions.insert_one({
+                "id": gen_id(),
+                "type": "expense",
+                "player_id": w["player_id"],
+                "amount": abs(balance),
+                "payment_method": method,
+                "description": f"Saída Cash (Lucro Pago): {w['player_name']}",
+                "session_id": wid,
+                "created_at": iso(now_utc()),
+            })
+            # Neutralize the credit in debt_balance because it was paid in cash
+            await db.players.update_one({"id": w["player_id"]}, {"$inc": {"debt_balance": abs(balance)}})
+        elif balance < 0:
+            # PLAYER PAYS HOUSE (Income/Debt Payment)
+            await db.transactions.insert_one({
+                "id": gen_id(),
+                "type": "debt_payment",
+                "player_id": w["player_id"],
+                "amount": abs(balance),
+                "payment_method": method,
+                "description": f"Acerto Cash (Perda Recebida): {w['player_name']}",
+                "session_id": wid,
+                "created_at": iso(now_utc()),
+            })
+            # Neutralize the remaining debt because it was paid in cash
+            await db.players.update_one({"id": w["player_id"]}, {"$inc": {"debt_balance": -abs(balance)}})
+            
+    return {"ok": True}
+
+@api.get("/cash-tables/{tid}/seated")
+async def get_seated(tid: str, _: dict = Depends(get_current_user)):
+    docs = await db.waitlist.find({"table_id": tid, "status": "seated"}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    for d in docs:
+        charges = await db.charges.find({"session_id": d["id"]}).to_list(100)
+        d["total_buyin"] = sum(c["amount"] for c in charges if c["type"] == "cash_buyin")
+        d["total_cashout"] = sum(c["amount"] for c in charges if c["type"] == "cash_cashout")
+    return docs
+
+@api.get("/cash-tables/{tid}/summary")
+async def get_table_summary(tid: str, _: dict = Depends(get_current_user)):
+    buyins = await db.charges.find({"table_id": tid, "type": "cash_buyin"}, {"amount": 1}).to_list(None)
+    cashouts = await db.charges.find({"table_id": tid, "type": "cash_cashout"}, {"amount": 1}).to_list(None)
+    
+    total_buyins = sum(c.get("amount", 0) for c in buyins)
+    total_cashouts = sum(c.get("amount", 0) for c in cashouts)
+    total_collected = max(0, total_buyins - total_cashouts)
+    
+    suggested_rake = round(total_collected * 0.7143, 2)
+    suggested_jackpot = round(total_collected * 0.2857, 2)
+    
+    return {
+        "total_buyins": total_buyins,
+        "total_cashouts": total_cashouts,
+        "total_collected": total_collected,
+        "suggested_rake": suggested_rake,
+        "suggested_jackpot": suggested_jackpot
+    }
+
+@api.get("/jackpot")
+async def get_jackpot(_: dict = Depends(get_current_user)):
+    j = await db.settings.find_one({"id": "global_jackpot"}, {"_id": 0})
+    return {"balance": j["balance"] if j else 0.0}
+
+@api.post("/jackpot/adjust")
+async def adjust_jackpot(amount: float = Query(...), description: str = Query("Ajuste Manual"), _: dict = Depends(require_admin)):
+    await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": amount}}, upsert=True)
+    await db.transactions.insert_one({
+        "id": gen_id(),
+        "type": "jackpot_in" if amount >= 0 else "jackpot_out",
+        "player_id": "house",
+        "amount": abs(amount),
+        "payment_method": "cash",
+        "description": description,
+        "created_at": iso(now_utc()),
+    })
     return {"ok": True}
 
 
@@ -1144,6 +1419,7 @@ async def rankings(
     types: Optional[str] = None,  # comma-separated
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    discards: int = Query(0),
     _: dict = Depends(get_current_user),
 ):
     t_query: Dict[str, Any] = {}
@@ -1172,13 +1448,13 @@ async def rankings(
             by_player[pid] = {
                 "player_id": pid,
                 "player_name": e.get("player_name", "—"),
-                "total_points": 0,
+                "scores": [],
                 "tournaments": 0,
                 "best_position": None,
                 "itm": 0,
             }
         rec = by_player[pid]
-        rec["total_points"] += float(e.get("points", 0))
+        rec["scores"].append(float(e.get("points", 0)))
         rec["tournaments"] += 1
         pos = e.get("final_position")
         if pos:
@@ -1186,6 +1462,13 @@ async def rankings(
                 rec["best_position"] = pos
             if pos <= 9:
                 rec["itm"] += 1
+                
+    stages_to_count = max(0, len(selected_ids) - discards)
+    
+    for rec in by_player.values():
+        rec["total_points"] = sum(sorted(rec["scores"], reverse=True)[:stages_to_count]) if stages_to_count > 0 else 0
+        del rec["scores"]
+
     ranking = sorted(by_player.values(), key=lambda x: (-x["total_points"], -x["tournaments"]))
     for idx, r in enumerate(ranking, start=1):
         r["rank"] = idx
@@ -1198,18 +1481,35 @@ async def rankings(
 async def dashboard_summary(_: dict = Depends(get_current_user)):
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     today_iso = iso(today_start)
-    # today revenue (paid charges + cash chip sales + debt payments today)
+    
+    # 1. Tournament Rake (Accrual)
+    entries_today = await db.entries.find({"created_at": {"$gte": today_iso}}, {"_id": 0, "tournament_id": 1}).to_list(10000)
+    t_ids = list(set(e["tournament_id"] for e in entries_today))
+    tournaments = await db.tournaments.find({"id": {"$in": t_ids}}, {"_id": 0, "id": 1, "rake": 1}).to_list(1000)
+    rake_map = {t["id"]: float(t.get("rake", 0)) for t in tournaments}
+    tour_rake = sum(rake_map.get(e["tournament_id"], 0) for e in entries_today)
+    
+    # 2. Cash Rake + Manual adjustments
     txs_today = await db.transactions.find({"created_at": {"$gte": today_iso}}, {"_id": 0}).to_list(5000)
-    revenue_today = 0.0
+    cash_rake = 0.0
+    manual_adj = 0.0
     for t in txs_today:
-        if t.get("type") in ("tournament_payment", "cash_chip_sale", "debt_payment", "manual_in"):
-            if t.get("payment_method") != "debt":
-                revenue_today += float(t.get("amount", 0))
-        elif t.get("type") == "manual_out":
-            revenue_today -= float(t.get("amount", 0))
+        ttype = t.get("type")
+        desc = t.get("description", "")
+        amt = float(t.get("amount", 0))
+        if ttype == "income" and "Rake" in desc:
+            cash_rake += amt
+        elif ttype == "manual_in":
+            manual_adj += amt
+        elif ttype == "manual_out":
+            manual_adj -= amt
+            
+    revenue_today = tour_rake + cash_rake + manual_adj
+    
     open_tables = await db.cash_tables.count_documents({"status": "open"})
     ongoing_tournaments = await db.tournaments.count_documents({"status": "in_progress"})
-    # active players: distinct players in active entries of in-progress tournaments + waitlist seated
+    
+    # active players
     in_prog = await db.tournaments.find({"status": "in_progress"}, {"_id": 0, "id": 1}).to_list(200)
     in_prog_ids = [t["id"] for t in in_prog]
     active_players_set = set()
@@ -1217,19 +1517,23 @@ async def dashboard_summary(_: dict = Depends(get_current_user)):
         active_entries = await db.entries.find({"tournament_id": {"$in": in_prog_ids}, "status": "active"}, {"_id": 0, "player_id": 1}).to_list(2000)
         for e in active_entries:
             active_players_set.add(e["player_id"])
+    
     seated_count = 0
     open_tables_docs = await db.cash_tables.find({"status": "open"}, {"_id": 0}).to_list(100)
     for tt in open_tables_docs:
         seated_count += int(tt.get("seated_count", 0))
+        
     total_players = await db.players.count_documents({})
     total_debt_doc = await db.players.aggregate([{"$group": {"_id": None, "total": {"$sum": "$debt_balance"}}}]).to_list(1)
     total_debt = float(total_debt_doc[0]["total"]) if total_debt_doc else 0.0
+    
     pending_charges = await db.charges.aggregate([
         {"$match": {"payment_status": "pending"}},
         {"$group": {"_id": None, "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
     ]).to_list(1)
     pending_total = float(pending_charges[0]["total"]) if pending_charges else 0.0
     pending_count = int(pending_charges[0]["count"]) if pending_charges else 0
+    
     return {
         "revenue_today": round(revenue_today, 2),
         "open_tables": open_tables,
@@ -1244,25 +1548,47 @@ async def dashboard_summary(_: dict = Depends(get_current_user)):
 
 @api.get("/dashboard/revenue")
 async def dashboard_revenue(days: int = 7, _: dict = Depends(get_current_user)):
-    start = (datetime.now(timezone.utc) - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    txs = await db.transactions.find({"created_at": {"$gte": iso(start)}}, {"_id": 0}).to_list(20000)
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_iso = iso(start)
+    
+    # Fetch all data needed for the period
+    all_entries = await db.entries.find({"created_at": {"$gte": start_iso}}, {"_id": 0, "tournament_id": 1, "created_at": 1}).to_list(50000)
+    all_txs = await db.transactions.find({"created_at": {"$gte": start_iso}}, {"_id": 0, "type": 1, "amount": 1, "description": 1, "created_at": 1}).to_list(20000)
+    
+    t_ids = list(set(e["tournament_id"] for e in all_entries))
+    tournaments = await db.tournaments.find({"id": {"$in": t_ids}}, {"_id": 0, "id": 1, "rake": 1}).to_list(2000)
+    rake_map = {t["id"]: float(t.get("rake", 0)) for t in tournaments}
+    
     buckets: Dict[str, float] = {}
     for i in range(days):
         d = (start + timedelta(days=i)).date().isoformat()
         buckets[d] = 0.0
-    for t in txs:
+        
+    # Add Tournament Rake
+    for e in all_entries:
+        try:
+            d = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00")).date().isoformat()
+            if d in buckets:
+                buckets[d] += rake_map.get(e["tournament_id"], 0)
+        except Exception: continue
+        
+    # Add Cash Rake and Manual Adjustments
+    for t in all_txs:
         try:
             d = datetime.fromisoformat(t["created_at"].replace("Z", "+00:00")).date().isoformat()
-        except Exception:
-            continue
-        if d not in buckets:
-            continue
-        amount = float(t.get("amount", 0))
-        if t.get("type") in ("tournament_payment", "cash_chip_sale", "debt_payment", "manual_in"):
-            if t.get("payment_method") != "debt":
-                buckets[d] += amount
-        elif t.get("type") == "manual_out":
-            buckets[d] -= amount
+            if d in buckets:
+                ttype = t.get("type")
+                desc = t.get("description", "")
+                amt = float(t.get("amount", 0))
+                if ttype == "income" and "Rake" in desc:
+                    buckets[d] += amt
+                elif ttype == "manual_in":
+                    buckets[d] += amt
+                elif ttype == "manual_out":
+                    buckets[d] -= amt
+        except Exception: continue
+        
     return [{"date": k, "revenue": round(v, 2)} for k, v in sorted(buckets.items())]
 
 

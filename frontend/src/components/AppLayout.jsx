@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
 import {
     LayoutDashboard, Trophy, Users, BarChart3, Wallet, Spade,
     Settings2, LogOut, Menu, X, Diamond, ShieldCheck,
@@ -25,7 +26,14 @@ const ADMIN_NAV = [
 export const AppLayout = () => {
     const { user, logout } = useAuth();
     const [open, setOpen] = useState(false);
+    const [houseName, setHouseName] = useState("Casa Royale");
     const navigate = useNavigate();
+
+    React.useEffect(() => {
+        api.get("/config").then(({ data }) => {
+            if (data.house_name) setHouseName(data.house_name);
+        }).catch(() => {});
+    }, []);
 
     const handleLogout = async () => {
         await logout();
@@ -90,7 +98,7 @@ export const AppLayout = () => {
                         <Spade className="size-5 text-primary" strokeWidth={2} />
                     </div>
                     <div>
-                        <div className="font-heading font-bold tracking-tight text-lg leading-none">Casa Royale</div>
+                        <div className="font-heading font-bold tracking-tight text-lg leading-none">{houseName}</div>
                         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Poker Manager</div>
                     </div>
                 </div>
@@ -127,7 +135,7 @@ export const AppLayout = () => {
                         <div className="flex items-center justify-between px-5 pt-5">
                             <div className="flex items-center gap-2">
                                 <Spade className="size-5 text-primary" strokeWidth={2} />
-                                <span className="font-heading font-bold">Casa Royale</span>
+                                <span className="font-heading font-bold">{houseName}</span>
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} data-testid="close-sidebar">
                                 <X className="size-4" />
@@ -154,7 +162,7 @@ export const AppLayout = () => {
                     </Button>
                     <div className="flex items-center gap-2">
                         <Spade className="size-4 text-primary" />
-                        <span className="font-heading font-bold tracking-tight">Casa Royale</span>
+                        <span className="font-heading font-bold tracking-tight">{houseName}</span>
                     </div>
                     <div className="size-9" />
                 </header>

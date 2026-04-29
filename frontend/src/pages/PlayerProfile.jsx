@@ -71,6 +71,32 @@ export default function PlayerProfile() {
                             </Link>
                         ))}
                     </div>
+
+                    <h3 className="font-heading text-lg font-semibold mb-4 mt-8">Sessões de Cash Game</h3>
+                    <div className="space-y-2">
+                        {(data.cash_sessions || []).length === 0 && <div className="text-sm text-muted-foreground">Sem sessões de cash ainda.</div>}
+                        {(data.cash_sessions || []).map((s) => (
+                            <div key={s.id} className="rounded-lg p-3 bg-surface-elevated border border-white/5">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="font-semibold truncate">{s.table_name}</div>
+                                        <div className="text-xs text-muted-foreground">{fmtDateTime(s.created_at)}</div>
+                                    </div>
+                                    <div className="flex gap-4 text-right">
+                                        <div className="text-xs">
+                                            <div className="text-muted-foreground">Compra / Saída</div>
+                                            <div className="font-mono">{fmtBRL(s.buyin)} / {fmtBRL(s.cashout)}</div>
+                                        </div>
+                                        <div className="text-sm self-center">
+                                            <div className={`font-mono font-bold ${s.result >= 0 ? "text-primary" : "text-destructive"}`}>
+                                                {s.result >= 0 ? "+" : ""}{fmtBRL(s.result)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="rounded-2xl bg-surface border border-white/5 p-6">

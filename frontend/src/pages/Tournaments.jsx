@@ -214,8 +214,8 @@ export default function Tournaments() {
                             </div>
                             <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
                                 <div>
-                                    <div className="text-muted-foreground text-[10px] uppercase tracking-widest">{t.is_freeroll ? "Entrada" : "Buy-in"}</div>
-                                    <div className="font-mono font-semibold">{t.is_freeroll ? "Gratuita" : fmtBRL(t.buy_in + t.rake)}</div>
+                                    <div className="text-muted-foreground text-[10px] uppercase tracking-widest">{t.is_freeroll ? "Entrada" : "Buy-in + Rake"}</div>
+                                    <div className="font-mono font-semibold text-xs">{t.is_freeroll ? "Gratuita" : `${fmtBRL(t.buy_in)} + ${fmtBRL(t.rake)}`}</div>
                                 </div>
                                 <div>
                                     <div className="text-muted-foreground text-[10px] uppercase tracking-widest">Rebuy</div>

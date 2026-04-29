@@ -263,7 +263,16 @@ const DebtPanel = ({ debtors, reload }) => {
                         {debtors.length === 0 && <tr><td colSpan={3} className="text-center py-12 text-muted-foreground">Nenhum jogador devedor.</td></tr>}
                         {debtors.map((p) => (
                             <tr key={p.id} className="border-t border-white/5">
-                                <td className="py-3 px-4 font-medium">{p.name}</td>
+                                <td className="py-3 px-4 font-medium">
+                                    {p.name}
+                                    {p.last_session_result !== undefined && (
+                                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                                            Última sessão: <span className={p.last_session_result >= 0 ? "text-primary" : "text-destructive"}>
+                                                {p.last_session_result >= 0 ? "+" : ""}{fmtBRL(p.last_session_result)}
+                                            </span>
+                                        </div>
+                                    )}
+                                </td>
                                 <td className="py-3 px-4 text-right font-mono font-semibold text-destructive">{fmtBRL(p.debt_balance)}</td>
                                 <td className="py-3 px-4 text-right">
                                     <Button data-testid={`pay-debt-${p.id}`} size="sm" onClick={() => { setSelected(p); setAmount(p.debt_balance); setOpen(true); }} className="bg-primary text-primary-foreground hover:bg-primary/90">

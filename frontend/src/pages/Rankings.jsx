@@ -16,6 +16,7 @@ export default function Rankings() {
     const [selectedIds, setSelectedIds] = useState([]);
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
+    const [discards, setDiscards] = useState(0);
     const [data, setData] = useState({ ranking: [], count: 0, tournaments: [] });
 
     useEffect(() => {
@@ -33,8 +34,9 @@ export default function Rankings() {
         if (filterMode === "select" && selectedIds.length) params.append("tournament_ids", selectedIds.join(","));
         if (from) params.append("date_from", from);
         if (to) params.append("date_to", to);
+        if (discards > 0) params.append("discards", discards);
         api.get(`/rankings${params.toString() ? `?${params.toString()}` : ""}`).then(({ data }) => setData(data));
-    }, [filterMode, type, selectedIds, from, to]);
+    }, [filterMode, type, selectedIds, from, to, discards]);
 
     return (
         <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px] mx-auto animate-fade-in-up">
@@ -80,6 +82,10 @@ export default function Rankings() {
                     <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-widest text-muted-foreground">Até</Label>
                         <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="bg-surface-elevated border-white/10" data-testid="filter-to-date" />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-widest text-muted-foreground" title="Exclui as piores pontuações do jogador">Descartes</Label>
+                        <Input type="number" min="0" value={discards} onChange={(e) => setDiscards(Number(e.target.value) || 0)} className="bg-surface-elevated border-white/10" />
                     </div>
                 </div>
                 {filterMode === "select" && (

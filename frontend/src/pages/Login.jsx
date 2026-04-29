@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Spade, Loader2 } from "lucide-react";
 import { apiErr } from "@/lib/format";
 import { toast } from "sonner";
+import api from "@/lib/api";
 
 export default function Login() {
     const { user, login } = useAuth();
@@ -15,6 +16,13 @@ export default function Login() {
     const [password, setPassword] = useState("admin123");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [houseName, setHouseName] = useState("Casa Royale");
+
+    React.useEffect(() => {
+        api.get("/config").then(({ data }) => {
+            if (data.house_name) setHouseName(data.house_name);
+        }).catch(() => {});
+    }, []);
 
     if (user && user !== false) return <Navigate to="/dashboard" replace />;
 
@@ -24,7 +32,7 @@ export default function Login() {
         setLoading(true);
         try {
             await login(email, password);
-            toast.success("Bem-vindo à Casa Royale");
+            toast.success(`Bem-vindo à ${houseName}`);
             navigate("/dashboard", { replace: true });
         } catch (err) {
             setError(apiErr(err));
@@ -40,7 +48,7 @@ export default function Login() {
                     <Spade className="size-5 text-primary" strokeWidth={2} />
                 </div>
                 <div>
-                    <div className="font-heading font-bold tracking-tight text-lg leading-none">Casa Royale</div>
+                    <div className="font-heading font-bold tracking-tight text-lg leading-none">{houseName}</div>
                     <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Poker Manager</div>
                 </div>
             </div>
@@ -103,7 +111,7 @@ export default function Login() {
                     </div>
                 </div>
                 <div className="mt-6 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                    Casa Royale · Operações de Poker · 24/7
+                    {houseName} · Operações de Poker · 24/7
                 </div>
             </div>
         </div>

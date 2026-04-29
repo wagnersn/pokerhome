@@ -52,7 +52,7 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-                <Stat testid="stat-revenue" icon={Coins} label="Receita Hoje" value={fmtBRL(summary?.revenue_today ?? 0)} sub="Pagamentos recebidos" />
+                <Stat testid="stat-revenue" icon={Coins} label="Receita Hoje" value={fmtBRL(summary?.revenue_today ?? 0)} sub="Rake arrecadado" />
                 <Stat testid="stat-active-players" icon={Users2} label="Jogadores Ativos" value={fmtNumber(summary?.active_players ?? 0)} sub={`${summary?.total_players ?? 0} cadastrados`} />
                 <Stat testid="stat-tables" icon={Spade} label="Mesas Cash Abertas" value={fmtNumber(summary?.open_tables ?? 0)} />
                 <Stat testid="stat-tournaments" icon={Trophy} label="Torneios em Andamento" value={fmtNumber(summary?.ongoing_tournaments ?? 0)} />

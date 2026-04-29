@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -14,7 +15,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, Layers, Skull, RotateCcw, Calculator, Edit3 } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, Layers, Skull, RotateCcw, Calculator, Edit3, Trash2 } from "lucide-react";
 import { fmtBRL, fmtDateTime, apiErr, fmtNumber } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -36,6 +37,7 @@ const DEFAULT_DIST = [
 
 export default function TournamentDetail() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const [t, setT] = useState(null);
     const [entries, setEntries] = useState([]);
@@ -48,11 +50,75 @@ export default function TournamentDetail() {
     const [posValue, setPosValue] = useState("");
     const [prizeOpen, setPrizeOpen] = useState(false);
     const [dist, setDist] = useState(DEFAULT_DIST);
+    const [deleteOpen, setDeleteOpen] = useState(false);
     const [search, setSearch] = useState("");
     const [chipDialog, setChipDialog] = useState(null); // entry being edited
     const [chipValue, setChipValue] = useState("");
     const [countMode, setCountMode] = useState(false);
     const [entryType, setEntryType] = useState("simple"); // simple | double for new enrollment
+    
+    // Edit Tournament State
+    const [editOpen, setEditOpen] = useState(false);
+    const [savingEdit, setSavingEdit] = useState(false);
+    const [editForm, setEditForm] = useState({});
+
+    useEffect(() => {
+        if (editOpen && t) {
+            setEditForm({
+                ...t,
+                start_at: t.start_at ? t.start_at.slice(0, 16) : "",
+                buy_in: t.buy_in || 0,
+                rake: t.rake || 0,
+                rebuy: t.rebuy || 0,
+                double_buyin: t.double_buyin || 0,
+                double_rebuy: t.double_rebuy || 0,
+                addon_simple: t.addon_simple || 0,
+                super_addon: t.super_addon || 0,
+                bonus: t.bonus || 0,
+            });
+        }
+    }, [editOpen, t]);
+
+    const saveEdit = async (e) => {
+        e.preventDefault();
+        setSavingEdit(true);
+        try {
+            const body = {
+                ...editForm,
+                buy_in: Number(editForm.buy_in),
+                rake: Number(editForm.rake),
+                rebuy: Number(editForm.rebuy),
+                double_buyin: Number(editForm.double_buyin),
+                double_rebuy: Number(editForm.double_rebuy),
+                addon_simple: Number(editForm.addon_simple),
+                super_addon: Number(editForm.super_addon),
+                bonus: Number(editForm.bonus),
+                chips_buy_in: Number(editForm.chips_buy_in),
+                chips_double_buyin: Number(editForm.chips_double_buyin),
+                chips_rebuy: Number(editForm.chips_rebuy),
+                chips_double_rebuy: Number(editForm.chips_double_rebuy),
+                chips_addon: Number(editForm.chips_addon),
+                chips_super_addon: Number(editForm.chips_super_addon),
+                chips_bonus: Number(editForm.chips_bonus),
+                start_at: new Date(editForm.start_at).toISOString(),
+            };
+            
+            // Clean up extra fields not in TournamentIn
+            delete body.id;
+            delete body.status;
+            delete body.created_at;
+            delete body.prize_distribution;
+            
+            await api.put(`/tournaments/${id}`, body);
+            toast.success("Torneio atualizado");
+            setEditOpen(false);
+            load();
+        } catch (err) {
+            toast.error(apiErr(err));
+        } finally {
+            setSavingEdit(false);
+        }
+    };
 
     const load = useCallback(async () => {
         const [t, e, s] = await Promise.all([
@@ -67,6 +133,16 @@ export default function TournamentDetail() {
     }, [id]);
 
     useEffect(() => { load(); }, [load]);
+
+    const removeTournament = async () => {
+        try {
+            await api.delete(`/tournaments/${id}`);
+            toast.success("Torneio excluído");
+            navigate("/tournaments");
+        } catch (err) {
+            toast.error(apiErr(err));
+        }
+    };
 
     useEffect(() => {
         const t = setTimeout(async () => {
@@ -195,22 +271,105 @@ export default function TournamentDetail() {
                         {t.is_freeroll && <span className="text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full bg-success/15 text-success border border-success/30">Freeroll</span>}
                         <span className={`text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full ${status.cls}`}>{status.label}</span>
                         {user?.role === "admin" && (
-                            <Select value={t.status} onValueChange={setStatus}>
-                                <SelectTrigger data-testid="tour-status-select" className="w-44 bg-surface-elevated border-white/10">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="scheduled">Agendado</SelectItem>
-                                    <SelectItem value="in_progress">Em andamento</SelectItem>
-                                    <SelectItem value="finished">Finalizado</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <>
+                                <Select value={t.status} onValueChange={setStatus}>
+                                    <SelectTrigger data-testid="tour-status-select" className="w-44 bg-surface-elevated border-white/10">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="scheduled">Agendado</SelectItem>
+                                        <SelectItem value="in_progress">Em andamento</SelectItem>
+                                        <SelectItem value="finished">Finalizado</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                
+                                <div className="flex gap-2">
+                                    <Button variant="secondary" size="icon" onClick={() => setDeleteOpen(true)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Apagar Torneio">
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                    <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button variant="secondary" size="icon" data-testid="edit-tournament-btn" title="Editar Torneio">
+                                                <Edit3 className="size-4" />
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="bg-surface border-white/10 max-w-2xl max-h-[90vh] overflow-y-auto">
+                                            <DialogHeader>
+                                                <DialogTitle>Editar torneio</DialogTitle>
+                                            </DialogHeader>
+                                            <form onSubmit={saveEdit} className="space-y-4">
+                                            <label className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-elevated border border-white/5 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editForm.is_freeroll}
+                                                    onChange={(e) => setEditForm({ ...editForm, is_freeroll: e.target.checked })}
+                                                    className="size-4 accent-primary"
+                                                />
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-semibold">Freeroll</div>
+                                                    <div className="text-xs text-muted-foreground">Sem buy-in nem rake. Rebuys e add-ons opcionais.</div>
+                                                </div>
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1.5 col-span-2">
+                                                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">Nome</Label>
+                                                    <Input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="bg-surface-elevated border-white/10" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">Tipo</Label>
+                                                    <Input value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} className="bg-surface-elevated border-white/10" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">Data/Hora</Label>
+                                                    <Input type="datetime-local" value={editForm.start_at} onChange={(e) => setEditForm({ ...editForm, start_at: e.target.value })} className="bg-surface-elevated border-white/10" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Valores (R$)</div>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <Money label="Buy-in" value={editForm.buy_in} on={(v) => setEditForm({ ...editForm, buy_in: v })} disabled={editForm.is_freeroll} />
+                                                    <Money label="Taxa (Rake)" value={editForm.rake} on={(v) => setEditForm({ ...editForm, rake: v })} disabled={editForm.is_freeroll} />
+                                                    <Money label="Entrada dupla" value={editForm.double_buyin} on={(v) => setEditForm({ ...editForm, double_buyin: v })} disabled={editForm.is_freeroll} />
+                                                    <Money label="Rebuy" value={editForm.rebuy} on={(v) => setEditForm({ ...editForm, rebuy: v })} />
+                                                    <Money label="Rebuy duplo" value={editForm.double_rebuy} on={(v) => setEditForm({ ...editForm, double_rebuy: v })} />
+                                                    <Money label="Add-on" value={editForm.addon_simple} on={(v) => setEditForm({ ...editForm, addon_simple: v })} />
+                                                    <Money label="Super Add-on" value={editForm.super_addon} on={(v) => setEditForm({ ...editForm, super_addon: v })} />
+                                                    <Money label="Bônus / Staff" value={editForm.bonus} on={(v) => setEditForm({ ...editForm, bonus: v })} />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Fichas por ação</div>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <Chips label="Buy-in" value={editForm.chips_buy_in} on={(v) => setEditForm({ ...editForm, chips_buy_in: v })} />
+                                                    <Chips label="Entrada dupla" value={editForm.chips_double_buyin} on={(v) => setEditForm({ ...editForm, chips_double_buyin: v })} />
+                                                    <Chips label="Rebuy" value={editForm.chips_rebuy} on={(v) => setEditForm({ ...editForm, chips_rebuy: v })} />
+                                                    <Chips label="Rebuy duplo" value={editForm.chips_double_rebuy} on={(v) => setEditForm({ ...editForm, chips_double_rebuy: v })} />
+                                                    <Chips label="Add-on" value={editForm.chips_addon} on={(v) => setEditForm({ ...editForm, chips_addon: v })} />
+                                                    <Chips label="Super Add-on" value={editForm.chips_super_addon} on={(v) => setEditForm({ ...editForm, chips_super_addon: v })} />
+                                                    <Chips label="Bônus" value={editForm.chips_bonus} on={(v) => setEditForm({ ...editForm, chips_bonus: v })} />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs uppercase tracking-widest text-muted-foreground">Observações</Label>
+                                                <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className="bg-surface-elevated border-white/10" />
+                                            </div>
+                                            <DialogFooter>
+                                                <Button type="submit" disabled={savingEdit} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                                    {savingEdit ? "Salvando..." : "Salvar alterações"}
+                                                </Button>
+                                            </DialogFooter>
+                                        </form>
+                                    </DialogContent>
+                                </Dialog>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
-                    <Pill label={t.is_freeroll ? "Buy-in" : "Buy-in"} v={t.is_freeroll ? "Gratuito" : fmtBRL(t.buy_in + t.rake)} sub={`${fmtNumber(t.chips_buy_in || 0)} fichas`} />
-                    <Pill label="Entrada dupla" v={t.is_freeroll ? "—" : fmtBRL((t.double_buyin || 0) + (t.rake || 0))} sub={`${fmtNumber(t.chips_double_buyin || 0)} fichas`} />
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-6">
+                    <Pill label={t.is_freeroll ? "Buy-in" : "Buy-in"} v={t.is_freeroll ? "Gratuito" : fmtBRL(t.buy_in)} sub={`${fmtNumber(t.chips_buy_in || 0)} fichas`} />
+                    <Pill label="Taxa (Rake)" v={t.is_freeroll ? "—" : fmtBRL(t.rake || 0)} sub="Por inscrição" />
+                    <Pill label="Entrada dupla" v={t.is_freeroll ? "—" : fmtBRL(t.double_buyin || 0)} sub={`${fmtNumber(t.chips_double_buyin || 0)} fichas`} />
                     <Pill label="Rebuy" v={fmtBRL(t.rebuy)} sub={`${fmtNumber(t.chips_rebuy || 0)} fichas`} />
                     <Pill label="Rebuy duplo" v={fmtBRL(t.double_rebuy || 0)} sub={`${fmtNumber(t.chips_double_rebuy || 0)} fichas`} />
                     <Pill label="Add-on / Super" v={`${fmtBRL(t.addon_simple)} · ${fmtBRL(t.super_addon)}`} sub={`${fmtNumber(t.chips_addon || 0)}/${fmtNumber(t.chips_super_addon || 0)}`} />
@@ -528,6 +687,23 @@ export default function TournamentDetail() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            {/* Delete Alert */}
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogContent className="bg-surface border-white/10">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Apagar Torneio?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja apagar este torneio? Todas as inscrições associadas serão perdidas. O histórico no Caixa (compras e dívidas) permanecerá intacto.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-surface-elevated border-white/10">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={removeTournament} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Sim, apagar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
@@ -568,4 +744,21 @@ const ActBtn = ({ icon: Icon, label, onClick, disabled, accent, danger, testid }
     >
         <Icon className="size-4" strokeWidth={1.6} />
     </button>
+);
+
+const Money = ({ label, value, on, testid, disabled }) => (
+    <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-widest text-muted-foreground">{label}</Label>
+        <Input data-testid={testid} type="number" min="0" step="0.01" value={value} onChange={(e) => on(e.target.value)} disabled={disabled} className="bg-surface-elevated border-white/10 font-mono disabled:opacity-40" />
+    </div>
+);
+
+const Chips = ({ label, value, on, testid }) => (
+    <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-widest text-muted-foreground">{label}</Label>
+        <div className="relative">
+            <Input data-testid={testid} type="number" min="0" step="500" value={value} onChange={(e) => on(e.target.value)} className="bg-surface-elevated border-white/10 font-mono pr-10" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-muted-foreground">fichas</span>
+        </div>
+    </div>
 );
