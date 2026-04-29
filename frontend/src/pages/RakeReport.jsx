@@ -1,23 +1,12 @@
 import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { fmtBRL, fmtDateTime, apiErr } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
-} from "@/components/ui/dialog";
-import { Coins, Filter, Plus, FileText, Landmark } from "lucide-react";
+import { Landmark, Coins, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 export default function RakeReport() {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [open, setOpen] = useState(false);
-    const [rake, setRake] = useState("");
-    const [jackpot, setJackpot] = useState("");
-    const [tableName, setTableName] = useState("");
-    const [notes, setNotes] = useState("");
 
     const load = async () => {
         setLoading(true);
@@ -30,69 +19,15 @@ export default function RakeReport() {
 
     useEffect(() => { load(); }, []);
 
-    const handleSave = async () => {
-        if (!rake && !jackpot) return toast.error("Informe ao menos um valor");
-        try {
-            await api.post("/cashier/rake/manual", {
-                rake: Number(rake) || 0,
-                jackpot: Number(jackpot) || 0,
-                table_name: tableName || "Geral",
-                notes
-            });
-            toast.success("Lançamento realizado");
-            setOpen(false);
-            setRake(""); setJackpot(""); setTableName(""); setNotes("");
-            load();
-        } catch (e) { toast.error(apiErr(e)); }
-    };
-
     const totalRake = history.filter(t => t.description.includes("Rake")).reduce((s, t) => s + t.amount, 0);
     const totalJack = history.filter(t => t.description.includes("Jackpot")).reduce((s, t) => s + t.amount, 0);
 
     return (
         <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px] mx-auto animate-fade-in-up">
-            <div className="mb-8 flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <div className="text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-2">Financeiro · Conferência</div>
-                    <h1 className="text-4xl font-heading font-bold tracking-tight">Relatório de Rake</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Acompanhamento de arrecadações (Rake e Jackpot) do salão.</p>
-                </div>
-                <Dialog open={open} onOpenChange={setOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                            <Plus className="size-4 mr-2" /> Lançar Rake Manual
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="bg-surface border-white/10">
-                        <DialogHeader>
-                            <DialogTitle>Lançamento Manual de Rake/Jackpot</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Valor Rake (R$)</Label>
-                                    <Input type="number" placeholder="0.00" value={rake} onChange={e => setRake(e.target.value)} className="bg-surface-elevated border-white/10 font-mono" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Valor Jackpot (R$)</Label>
-                                    <Input type="number" placeholder="0.00" value={jackpot} onChange={e => setJackpot(e.target.value)} className="bg-surface-elevated border-white/10 font-mono" />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Mesa / Dealer</Label>
-                                <Input placeholder="Ex: Mesa 1 / Dealer Juliano" value={tableName} onChange={e => setTableName(e.target.value)} className="bg-surface-elevated border-white/10" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Observações</Label>
-                                <Input placeholder="Ex: Troca de turno" value={notes} onChange={e => setNotes(e.target.value)} className="bg-surface-elevated border-white/10" />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-                            <Button onClick={handleSave} className="bg-primary text-primary-foreground">Salvar Lançamento</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+            <div className="mb-8">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-2">Financeiro · Conferência</div>
+                <h1 className="text-4xl font-heading font-bold tracking-tight">Relatório de Rake</h1>
+                <p className="text-sm text-muted-foreground mt-1">Acompanhamento e conferência das arrecadações (Rake e Jackpot).</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

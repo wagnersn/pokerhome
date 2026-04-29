@@ -13,7 +13,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Spade, UserPlus, Phone, X, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
+import { Plus, Spade, UserPlus, Phone, X, ChevronUp, ChevronDown, Trash2, Landmark, Coins } from "lucide-react";
 import { fmtBRL, apiErr } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -39,6 +39,8 @@ export default function CashGames() {
     const [jackpotBalance, setJackpotBalance] = useState(0);
     const [jackpotOpen, setJackpotOpen] = useState(false);
     const [jackpotForm, setJackpotForm] = useState({ amount: "", desc: "Ajuste Manual" });
+    const [manualRakeOpen, setManualRakeOpen] = useState(null);
+    const [manualRakeForm, setManualRakeForm] = useState({ rake: "", jackpot: "", notes: "" });
 
     const loadSeated = async (tid) => {
         try {
@@ -142,6 +144,22 @@ export default function CashGames() {
             toast.success("Jackpot atualizado");
             setJackpotOpen(false);
             setJackpotForm({ amount: "", desc: "Ajuste Manual" });
+            load();
+        } catch (e) { toast.error(apiErr(e)); }
+    };
+
+    const confirmManualRake = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post("/cashier/rake/manual", {
+                rake: Number(manualRakeForm.rake) || 0,
+                jackpot: Number(manualRakeForm.jackpot) || 0,
+                table_name: manualRakeOpen.name,
+                notes: manualRakeForm.notes
+            });
+            toast.success("Rake lançado com sucesso");
+            setManualRakeOpen(null);
+            setManualRakeForm({ rake: "", jackpot: "", notes: "" });
             load();
         } catch (e) { toast.error(apiErr(e)); }
     };
@@ -300,6 +318,11 @@ export default function CashGames() {
 
                             <div className="mt-5 flex items-center gap-2">
                                 <Button onClick={() => openTableDetail(t)} variant="outline" className="flex-1 bg-surface-elevated border-white/10 hover:bg-white/10">Ver Mesa</Button>
+                                {t.status === "open" && (
+                                    <Button onClick={() => { setManualRakeOpen(t); setManualRakeForm({ rake: "", jackpot: "", notes: "" }); }} variant="outline" className="bg-primary/5 text-primary border-primary/20 hover:bg-primary/10">
+                                        <Landmark className="size-4" />
+                                    </Button>
+                                )}
                                 <Button onClick={() => toggle(t)} data-testid={`toggle-table-${t.id}`} className={t.status === "open" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 w-12" : "bg-primary text-primary-foreground hover:bg-primary/90 flex-1"}>
                                     {t.status === "open" ? <X className="size-4"/> : "Abrir"}
                                 </Button>
@@ -546,6 +569,50 @@ export default function CashGames() {
                         
                         <DialogFooter className="mt-4">
                             <Button type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full">Confirmar Fechamento</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Manual Rake Dialog */}
+            <Dialog open={!!manualRakeOpen} onOpenChange={(o) => !o && setManualRakeOpen(null)}>
+                <DialogContent className="bg-surface border-white/10 max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Lançar Rake Manual</DialogTitle>
+                    </DialogHeader>
+                    <div className="text-sm text-muted-foreground mb-1">
+                        Mesa: <strong>{manualRakeOpen?.name}</strong>
+                    </div>
+                    <form onSubmit={confirmManualRake} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-widest text-muted-foreground">Rake (R$)</Label>
+                                <Input
+                                    type="number" required step="0.01" value={manualRakeForm.rake}
+                                    onChange={(e) => setManualRakeForm({ ...manualRakeForm, rake: e.target.value })}
+                                    className="bg-surface-elevated border-white/10 font-mono" placeholder="0.00"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-widest text-muted-foreground">Jackpot (R$)</Label>
+                                <Input
+                                    type="number" step="0.01" value={manualRakeForm.jackpot}
+                                    onChange={(e) => setManualRakeForm({ ...manualRakeForm, jackpot: e.target.value })}
+                                    className="bg-surface-elevated border-white/10 font-mono" placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs uppercase tracking-widest text-muted-foreground">Observações</Label>
+                            <Input
+                                value={manualRakeForm.notes}
+                                onChange={(e) => setManualRakeForm({ ...manualRakeForm, notes: e.target.value })}
+                                className="bg-surface-elevated border-white/10" placeholder="Ex: Troca de dealer"
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">Confirmar Lançamento</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
