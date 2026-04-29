@@ -168,6 +168,8 @@ class EntryOut(BaseModel):
     super_addons: int = 0
     bonus: bool = False
     total_chips: int = 0
+    current_chips: int = 0
+    eliminated_at: Optional[str] = None
     final_position: Optional[int] = None
     points: float = 0
     total_spent: float = 0
@@ -696,7 +698,9 @@ async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool =
         "addons_simple": 0,
         "super_addons": 0,
         "bonus": False,
-        "total_chips": 0,
+        "total_chips": int(t.get("chips_buy_in", 0)),
+        "current_chips": int(t.get("chips_buy_in", 0)),
+        "eliminated_at": None,
         "final_position": None,
         "points": 0,
         "total_spent": 0,
@@ -725,31 +729,77 @@ async def entry_action(entry_id: str, action: str = Query(...), _: dict = Depend
     t = await db.tournaments.find_one({"id": e["tournament_id"]}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Torneio não encontrado")
+    if e.get("status") == "eliminated":
+        raise HTTPException(400, "Jogador eliminado — reinscreva ou re-entry")
 
+    chips_added = 0
     if action == "rebuy":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"rebuys": 1}})
         await _create_charge(e, "rebuy", float(t.get("rebuy", 0)), "Rebuy")
+        chips_added = int(t.get("chips_rebuy", 0))
     elif action == "double_rebuy":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"double_rebuys": 1}})
         await _create_charge(e, "double_rebuy", float(t.get("double_rebuy", 0)), "Rebuy duplo")
+        chips_added = int(t.get("chips_double_rebuy", 0))
     elif action == "double_entry":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"double_entries": 1}})
         await _create_charge(e, "double_entry", float(t.get("double_buyin", 0)), "Entrada dupla")
+        chips_added = int(t.get("chips_double_buyin", 0))
     elif action == "addon":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"addons_simple": 1}})
         await _create_charge(e, "addon", float(t.get("addon_simple", 0)), "Add-on simples")
+        chips_added = int(t.get("chips_addon", 0))
     elif action == "super_addon":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"super_addons": 1}})
         await _create_charge(e, "super_addon", float(t.get("super_addon", 0)), "Super Add-on")
+        chips_added = int(t.get("chips_super_addon", 0))
     elif action == "bonus":
         if e.get("bonus"):
             raise HTTPException(400, "Bônus já aplicado")
         await db.entries.update_one({"id": entry_id}, {"$set": {"bonus": True}})
         await _create_charge(e, "bonus", float(t.get("bonus", 0)), "Bônus / Staff")
+        chips_added = int(t.get("chips_bonus", 0))
     else:
         raise HTTPException(400, "Ação inválida")
 
+    if chips_added:
+        await db.entries.update_one({"id": entry_id}, {"$inc": {"current_chips": chips_added}})
     await _recalc_entry(entry_id)
+    return {"ok": True, "chips_added": chips_added}
+
+
+@api.put("/entries/{entry_id}/chip-count")
+async def update_chip_count(entry_id: str, count: int = Query(..., ge=0), _: dict = Depends(get_current_user)):
+    """Atualiza a contagem atual de fichas do jogador (para uso em intervalos do torneio)."""
+    res = await db.entries.update_one({"id": entry_id}, {"$set": {"current_chips": int(count)}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Inscrição não encontrada")
+    return {"ok": True}
+
+
+@api.post("/entries/{entry_id}/eliminate")
+async def eliminate_entry(entry_id: str, _: dict = Depends(get_current_user)):
+    """Marca o jogador como eliminado (zera stack atual; fichas migram para outros jogadores)."""
+    e = await db.entries.find_one({"id": entry_id}, {"_id": 0})
+    if not e:
+        raise HTTPException(404, "Inscrição não encontrada")
+    await db.entries.update_one(
+        {"id": entry_id},
+        {"$set": {"status": "eliminated", "current_chips": 0, "eliminated_at": iso(now_utc())}},
+    )
+    return {"ok": True}
+
+
+@api.post("/entries/{entry_id}/reactivate")
+async def reactivate_entry(entry_id: str, _: dict = Depends(get_current_user)):
+    """Reverte a eliminação (caso tenha sido marcado por engano)."""
+    e = await db.entries.find_one({"id": entry_id}, {"_id": 0})
+    if not e:
+        raise HTTPException(404, "Inscrição não encontrada")
+    await db.entries.update_one(
+        {"id": entry_id},
+        {"$set": {"status": "active", "current_chips": int(e.get("total_chips", 0)), "eliminated_at": None}},
+    )
     return {"ok": True}
 
 
@@ -768,7 +818,7 @@ async def set_position(entry_id: str, position: int = Query(...), _: dict = Depe
                 if r["position"] == position:
                     points = float(r["points"])
                     break
-    await db.entries.update_one({"id": entry_id}, {"$set": {"final_position": position, "points": points, "status": "finalized"}})
+    await db.entries.update_one({"id": entry_id}, {"$set": {"final_position": position, "points": points, "status": "finalized", "current_chips": 0}})
     return {"ok": True, "points": points}
 
 
@@ -795,6 +845,20 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
     total_super = sum(e.get("super_addons", 0) for e in entries)
     total_bonus = sum(1 for e in entries if e.get("bonus"))
     total_chips = sum(e.get("total_chips", 0) for e in entries)
+    active = [e for e in entries if e.get("status") == "active"]
+    active_count = len(active)
+    current_chips_total = sum(e.get("current_chips", 0) for e in active)
+    avg_chips = (current_chips_total / active_count) if active_count else 0
+    leaders = sorted(active, key=lambda e: int(e.get("current_chips", 0)), reverse=True)[:5]
+    leaderboard = [
+        {
+            "entry_id": e["id"],
+            "player_id": e["player_id"],
+            "player_name": e.get("player_name"),
+            "current_chips": int(e.get("current_chips", 0)),
+        }
+        for e in leaders
+    ]
 
     gross = sum(c["amount"] for c in charges)
     rake_per_entry = float(t.get("rake", 0))
@@ -816,6 +880,9 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
             "super_addons": total_super,
             "bonus": total_bonus,
             "total_chips": total_chips,
+            "current_chips_total": current_chips_total,
+            "active_count": active_count,
+            "average_chips": round(avg_chips),
             "gross": round(gross, 2),
             "rake": round(total_rake, 2),
             "prize_pool": round(prize_pool, 2),
@@ -823,6 +890,7 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
             "debt": round(debt, 2),
             "pending": round(pending, 2),
         },
+        "leaderboard": leaderboard,
         "prize_distribution": t.get("prize_distribution"),
     }
 

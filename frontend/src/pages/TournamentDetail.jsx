@@ -14,7 +14,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, CircleDollarSign, Layers } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, CircleDollarSign, Layers, Skull, RotateCcw, Calculator, Edit3 } from "lucide-react";
 import { fmtBRL, fmtDateTime, apiErr, fmtNumber } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -49,6 +49,9 @@ export default function TournamentDetail() {
     const [prizeOpen, setPrizeOpen] = useState(false);
     const [dist, setDist] = useState(DEFAULT_DIST);
     const [search, setSearch] = useState("");
+    const [chipDialog, setChipDialog] = useState(null); // entry being edited
+    const [chipValue, setChipValue] = useState("");
+    const [countMode, setCountMode] = useState(false);
 
     const load = useCallback(async () => {
         const [t, e, s] = await Promise.all([
@@ -140,6 +143,34 @@ export default function TournamentDetail() {
         } catch (e) { toast.error(apiErr(e)); }
     };
 
+    const eliminate = async (entry) => {
+        if (!window.confirm(`Eliminar ${entry.player_name}? As fichas (${fmtNumber(entry.current_chips)}) já estão com outros jogadores.`)) return;
+        try {
+            await api.post(`/entries/${entry.id}/eliminate`);
+            toast.success(`${entry.player_name} eliminado`);
+            load();
+        } catch (e) { toast.error(apiErr(e)); }
+    };
+
+    const reactivate = async (entry) => {
+        try {
+            await api.post(`/entries/${entry.id}/reactivate`);
+            toast.success(`${entry.player_name} reativado`);
+            load();
+        } catch (e) { toast.error(apiErr(e)); }
+    };
+
+    const saveChipCount = async () => {
+        if (!chipDialog) return;
+        try {
+            await api.put(`/entries/${chipDialog.id}/chip-count?count=${Number(chipValue)}`);
+            toast.success(`Stack atualizado · ${fmtNumber(chipValue)} fichas`);
+            setChipDialog(null);
+            setChipValue("");
+            load();
+        } catch (e) { toast.error(apiErr(e)); }
+    };
+
     if (!t || !summary) return <div className="p-8 text-muted-foreground">Carregando...</div>;
     const totals = summary.totals;
     const status = STATUS_LABEL[t.status];
@@ -184,13 +215,48 @@ export default function TournamentDetail() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
                 <FinStat icon={Users2} label="Inscrições" v={`${fmtNumber(totals.entries)}${totals.double_entries ? ` (+${totals.double_entries})` : ""}`} />
                 <FinStat icon={Coins} label="Bruto" v={fmtBRL(totals.gross)} />
                 <FinStat icon={Crown} label="Rake" v={fmtBRL(totals.rake)} accent="warning" />
                 <FinStat icon={Trophy} label="Prize Pool" v={fmtBRL(totals.prize_pool)} accent="success" />
                 <FinStat icon={Layers} label="Fichas em Jogo" v={fmtNumber(totals.total_chips || 0)} accent="primary" />
+                <FinStat icon={Calculator} label="Média / Ativo" v={`${fmtNumber(totals.average_chips || 0)}`} accent="primary" sub={`${totals.active_count || 0} ativos`} />
             </div>
+
+            {/* Leaderboard de fichas */}
+            {summary.leaderboard?.length > 0 && (
+                <div className="rounded-2xl bg-surface border border-white/5 p-5 mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Crown className="size-4 text-primary" />
+                            <h3 className="font-heading text-lg font-semibold">Líderes em fichas</h3>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-mono">total ativo: {fmtNumber(totals.current_chips_total || 0)}</div>
+                    </div>
+                    <div className="space-y-2">
+                        {summary.leaderboard.map((l, idx) => {
+                            const max = summary.leaderboard[0]?.current_chips || 1;
+                            const pct = (l.current_chips / max) * 100;
+                            const aboveAvg = totals.average_chips ? l.current_chips >= totals.average_chips : false;
+                            return (
+                                <div key={l.entry_id} data-testid={`leader-${idx}`} className="flex items-center gap-3">
+                                    <div className="w-6 text-right font-mono text-sm text-muted-foreground">{idx + 1}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <Link to={`/jogadores/${l.player_id}`} className="text-sm font-medium hover:text-primary truncate">{l.player_name}</Link>
+                                            <span className={`text-sm font-mono font-semibold ${aboveAvg ? "text-success" : "text-warning"}`}>{fmtNumber(l.current_chips)}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                            <div className={`h-full ${idx === 0 ? "bg-primary" : "bg-primary/40"}`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Inscrições + ações */}
             <div className="rounded-2xl bg-surface border border-white/5 overflow-hidden">
@@ -199,7 +265,15 @@ export default function TournamentDetail() {
                         <h3 className="font-heading text-xl font-semibold">Inscritos</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">Use os botões rápidos para registrar ações na mesa.</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                            variant={countMode ? "default" : "secondary"}
+                            onClick={() => setCountMode(!countMode)}
+                            data-testid="count-mode-toggle"
+                            className={countMode ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}
+                        >
+                            <Calculator className="size-4" /> {countMode ? "Sair da contagem" : "Contagem de fichas"}
+                        </Button>
                         <Button onClick={() => setPrizeOpen(true)} variant="secondary" data-testid="prize-pool-button">
                             <Trophy className="size-4" /> Premiação
                         </Button>
@@ -252,19 +326,26 @@ export default function TournamentDetail() {
                                 <th className="text-center py-3 px-2">Add</th>
                                 <th className="text-center py-3 px-2">Sup</th>
                                 <th className="text-center py-3 px-2">Bn</th>
-                                <th className="text-right py-3 px-4">Fichas</th>
-                                <th className="text-right py-3 px-4">Total</th>
-                                <th className="text-right py-3 px-4">Pago</th>
+                                <th className="text-right py-3 px-4">Stack atual</th>
+                                <th className="text-right py-3 px-4 hidden xl:table-cell">Comprado</th>
+                                <th className="text-right py-3 px-4 hidden lg:table-cell">Total R$</th>
                                 <th className="text-right py-3 px-4">Pos.</th>
                                 <th className="text-right py-3 px-4">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {entries.length === 0 && <tr><td colSpan={12} className="text-center text-muted-foreground py-12">Nenhuma inscrição.</td></tr>}
-                            {entries.map((e) => (
-                                <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                            {entries.map((e) => {
+                                const isElim = e.status === "eliminated";
+                                const isFinal = e.status === "finalized";
+                                const aboveAvg = totals.average_chips && e.current_chips >= totals.average_chips;
+                                return (
+                                <tr key={e.id} data-testid={`entry-row-${e.id}`} className={`border-t border-white/5 hover:bg-white/[0.02] ${isElim ? "opacity-50" : ""}`}>
                                     <td className="py-3 px-4">
-                                        <Link to={`/jogadores/${e.player_id}`} className="font-medium hover:text-primary">{e.player_name}</Link>
+                                        <div className="flex items-center gap-2">
+                                            <Link to={`/jogadores/${e.player_id}`} className="font-medium hover:text-primary">{e.player_name}</Link>
+                                            {isElim && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/30">Eliminado</span>}
+                                        </div>
                                         {e.pending_amount > 0 && <div className="text-[10px] text-warning uppercase tracking-widest mt-0.5">Pendente {fmtBRL(e.pending_amount)}</div>}
                                     </td>
                                     <td className="text-center font-mono">{e.double_entries || 0}</td>
@@ -273,9 +354,19 @@ export default function TournamentDetail() {
                                     <td className="text-center font-mono">{e.addons_simple}</td>
                                     <td className="text-center font-mono">{e.super_addons}</td>
                                     <td className="text-center">{e.bonus ? "✓" : "—"}</td>
-                                    <td className="text-right font-mono text-primary font-semibold">{fmtNumber(e.total_chips || 0)}</td>
-                                    <td className="text-right font-mono">{fmtBRL(e.total_spent)}</td>
-                                    <td className="text-right font-mono text-success">{fmtBRL(e.paid_amount)}</td>
+                                    <td className="text-right">
+                                        <button
+                                            disabled={isElim || isFinal}
+                                            onClick={() => { setChipDialog(e); setChipValue(String(e.current_chips || 0)); }}
+                                            data-testid={`edit-chips-${e.id}`}
+                                            className={`inline-flex items-center gap-1.5 font-mono font-semibold ${isElim ? "text-muted-foreground" : aboveAvg ? "text-success hover:underline" : "text-warning hover:underline"} disabled:no-underline disabled:cursor-not-allowed`}
+                                        >
+                                            {fmtNumber(e.current_chips || 0)}
+                                            {!isElim && !isFinal && <Edit3 className="size-3 opacity-60" />}
+                                        </button>
+                                    </td>
+                                    <td className="text-right font-mono text-muted-foreground hidden xl:table-cell">{fmtNumber(e.total_chips || 0)}</td>
+                                    <td className="text-right font-mono hidden lg:table-cell">{fmtBRL(e.total_spent)}</td>
                                     <td className="text-right">
                                         {e.final_position ? (
                                             <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">#{e.final_position} · {e.points} pts</span>
@@ -287,16 +378,29 @@ export default function TournamentDetail() {
                                     </td>
                                     <td className="py-3 px-4">
                                         <div className="flex items-center justify-end gap-1 flex-wrap">
-                                            <ActBtn label="Entrada dupla" icon={CircleDollarSign} onClick={() => action(e.id, "double_entry")} testid={`act-double-entry-${e.id}`} />
-                                            <ActBtn label="Rebuy" icon={RotateCw} onClick={() => action(e.id, "rebuy")} testid={`act-rebuy-${e.id}`} />
-                                            <ActBtn label="Rebuy duplo" icon={RefreshCw} onClick={() => action(e.id, "double_rebuy")} testid={`act-double-rebuy-${e.id}`} />
-                                            <ActBtn label="Add-on" icon={PackagePlus} onClick={() => action(e.id, "addon")} testid={`act-addon-${e.id}`} />
-                                            <ActBtn label="Super" icon={Layers} onClick={() => action(e.id, "super_addon")} testid={`act-super-${e.id}`} />
-                                            <ActBtn label="Bônus" icon={Sparkles} onClick={() => action(e.id, "bonus")} disabled={e.bonus} testid={`act-bonus-${e.id}`} accent />
+                                            {countMode && !isElim && !isFinal ? (
+                                                <Button size="sm" variant="secondary" onClick={() => { setChipDialog(e); setChipValue(String(e.current_chips || 0)); }} data-testid={`count-${e.id}`}>
+                                                    <Calculator className="size-3.5" /> Contar
+                                                </Button>
+                                            ) : isElim ? (
+                                                <Button size="sm" variant="secondary" onClick={() => reactivate(e)} data-testid={`reactivate-${e.id}`}>
+                                                    <RotateCcw className="size-3.5" /> Reativar
+                                                </Button>
+                                            ) : (
+                                                <>
+                                                    <ActBtn label="Entrada dupla" icon={CircleDollarSign} onClick={() => action(e.id, "double_entry")} testid={`act-double-entry-${e.id}`} />
+                                                    <ActBtn label="Rebuy" icon={RotateCw} onClick={() => action(e.id, "rebuy")} testid={`act-rebuy-${e.id}`} />
+                                                    <ActBtn label="Rebuy duplo" icon={RefreshCw} onClick={() => action(e.id, "double_rebuy")} testid={`act-double-rebuy-${e.id}`} />
+                                                    <ActBtn label="Add-on" icon={PackagePlus} onClick={() => action(e.id, "addon")} testid={`act-addon-${e.id}`} />
+                                                    <ActBtn label="Super" icon={Layers} onClick={() => action(e.id, "super_addon")} testid={`act-super-${e.id}`} />
+                                                    <ActBtn label="Bônus" icon={Sparkles} onClick={() => action(e.id, "bonus")} disabled={e.bonus} testid={`act-bonus-${e.id}`} accent />
+                                                    <ActBtn label="Eliminar" icon={Skull} onClick={() => eliminate(e)} testid={`act-eliminate-${e.id}`} danger />
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                            );})}
                         </tbody>
                     </table>
                 </div>
@@ -342,6 +446,36 @@ export default function TournamentDetail() {
                 </DialogContent>
             </Dialog>
 
+            {/* Chip count dialog */}
+            <Dialog open={!!chipDialog} onOpenChange={(o) => !o && setChipDialog(null)}>
+                <DialogContent className="bg-surface border-white/10 max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Contagem de fichas · {chipDialog?.player_name}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="text-xs text-muted-foreground font-mono">
+                            Comprado: <span className="text-foreground">{fmtNumber(chipDialog?.total_chips || 0)}</span>
+                            {totals.average_chips ? <> · Média atual: <span className="text-foreground">{fmtNumber(totals.average_chips)}</span></> : null}
+                        </div>
+                        <Label className="text-xs uppercase tracking-widest text-muted-foreground">Stack atual</Label>
+                        <Input
+                            data-testid="chip-count-input"
+                            type="number"
+                            min="0"
+                            step="500"
+                            value={chipValue}
+                            onChange={(e) => setChipValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && saveChipCount()}
+                            autoFocus
+                            className="bg-surface-elevated border-white/10 font-mono text-lg h-12"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={saveChipCount} data-testid="save-chip-count-button" className="bg-primary text-primary-foreground hover:bg-primary/90">Atualizar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Position dialog */}
             <Dialog open={!!posDialog} onOpenChange={(o) => !o && setPosDialog(null)}>
                 <DialogContent className="bg-surface border-white/10 max-w-sm">
@@ -381,25 +515,31 @@ const Pill = ({ label, v, sub }) => (
     </div>
 );
 
-const FinStat = ({ icon: Icon, label, v, accent = "primary" }) => (
+const FinStat = ({ icon: Icon, label, v, sub, accent = "primary" }) => (
     <div className="rounded-2xl bg-surface border border-white/5 p-4 flex items-center gap-3">
         <div className={`size-10 rounded-lg flex items-center justify-center bg-${accent}/10 border border-${accent}/20`}>
             <Icon className={`size-4 text-${accent}`} strokeWidth={1.6} />
         </div>
-        <div>
+        <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-            <div className="font-mono text-lg font-bold">{v}</div>
+            <div className="font-mono text-lg font-bold leading-tight">{v}</div>
+            {sub && <div className="text-[10px] text-muted-foreground font-mono">{sub}</div>}
         </div>
     </div>
 );
 
-const ActBtn = ({ icon: Icon, label, onClick, disabled, accent, testid }) => (
+const ActBtn = ({ icon: Icon, label, onClick, disabled, accent, danger, testid }) => (
     <button
         onClick={onClick}
         disabled={disabled}
         data-testid={testid}
         title={label}
-        className={`size-8 rounded-md flex items-center justify-center transition-all border ${disabled ? "opacity-40 cursor-not-allowed border-white/5" : accent ? "bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary" : "border-white/10 hover:bg-white/5 hover:border-white/20"}`}
+        className={`size-8 rounded-md flex items-center justify-center transition-all border ${
+            disabled ? "opacity-40 cursor-not-allowed border-white/5"
+            : danger ? "bg-destructive/10 hover:bg-destructive/20 border-destructive/30 text-destructive"
+            : accent ? "bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary"
+            : "border-white/10 hover:bg-white/5 hover:border-white/20"
+        }`}
     >
         <Icon className="size-4" strokeWidth={1.6} />
     </button>
