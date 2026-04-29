@@ -344,8 +344,10 @@ def set_auth_cookie(response: Response, token: str):
 @api.post("/auth/login")
 async def login(body: LoginIn, response: Response, request: Request):
     email = body.email.lower().strip()
-    ip = request.client.host if request.client else "unknown"
-    identifier = f"{ip}:{email}"
+    # Behind ingress, request.client.host rotates; key the throttle by email (stable).
+    fwd = request.headers.get("X-Forwarded-For", "")
+    ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
+    identifier = f"email:{email}"
 
     # Brute force: 5 attempts in 15 min
     cutoff = now_utc() - timedelta(minutes=15)
@@ -1106,10 +1108,17 @@ async def dashboard_revenue(days: int = 7, _: dict = Depends(get_current_user)):
 # ---------- Mount ----------
 app.include_router(api)
 
+_cors = os.environ.get("CORS_ORIGINS", "").strip()
+if _cors and _cors != "*":
+    _origins = [o.strip() for o in _cors.split(",") if o.strip()]
+else:
+    _frontend = os.environ.get("FRONTEND_URL", "").strip()
+    _origins = [_frontend] if _frontend else ["http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
