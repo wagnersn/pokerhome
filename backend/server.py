@@ -1034,6 +1034,44 @@ async def pay_prize(payload: dict = Body(...), _: dict = Depends(require_admin))
     return {"ok": True}
 
 
+@api.post("/cashier/rake/manual")
+async def record_manual_rake(payload: dict = Body(...), _: dict = Depends(require_admin)):
+    rake = float(payload.get("rake", 0))
+    jackpot = float(payload.get("jackpot", 0))
+    table_name = payload.get("table_name", "Geral")
+    notes = payload.get("notes", "")
+    
+    if rake > 0:
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "income",
+            "amount": rake,
+            "description": f"Rake Manual: {table_name} {notes}".strip(),
+            "created_at": iso(now_utc()),
+        })
+    if jackpot > 0:
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "income",
+            "amount": jackpot,
+            "description": f"Jackpot Manual: {table_name} {notes}".strip(),
+            "created_at": iso(now_utc()),
+        })
+        await db.config.update_one({}, {"$inc": {"jackpot_balance": jackpot}}, upsert=True)
+    return {"ok": True}
+
+
+@api.get("/cashier/rake/history")
+async def rake_history(days: int = 30, _: dict = Depends(get_current_user)):
+    now = now_utc()
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    txs = await db.transactions.find({
+        "created_at": {"$gte": iso(start)},
+        "description": {"$regex": "(Rake|Jackpot)"}
+    }).sort("created_at", -1).to_list(2000)
+    return txs
+
+
 @api.get("/cashier/pending")
 async def cashier_pending(_: dict = Depends(get_current_user)):
     charges = await db.charges.find({"payment_status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(2000)

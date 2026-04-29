@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
     LayoutDashboard, Trophy, Users, BarChart3, Wallet, Spade,
-    Settings2, LogOut, Menu, X, Diamond, ShieldCheck,
+    Settings2, LogOut, Menu, X, Diamond, ShieldCheck, FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const NAV = [
     { to: "/ranking", label: "Ranking", icon: BarChart3 },
     { to: "/caixa", label: "Caixa", icon: Wallet },
     { to: "/cash-games", label: "Cash Games", icon: Spade },
+    { to: "/rake-report", label: "Relatório Rake", icon: FileText },
 ];
 
 const ADMIN_NAV = [
