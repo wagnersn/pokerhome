@@ -131,10 +131,20 @@ class TournamentIn(BaseModel):
     start_at: str  # ISO datetime
     buy_in: float = 0
     rake: float = 0
+    double_buyin: float = 0
     rebuy: float = 0
+    double_rebuy: float = 0
     addon_simple: float = 0
     super_addon: float = 0
     bonus: float = 0
+    # Fichas por ação (controle de chips em jogo)
+    chips_buy_in: int = 0
+    chips_double_buyin: int = 0
+    chips_rebuy: int = 0
+    chips_double_rebuy: int = 0
+    chips_addon: int = 0
+    chips_super_addon: int = 0
+    chips_bonus: int = 0
     point_structure_id: Optional[str] = None
     notes: Optional[str] = None
 
@@ -151,10 +161,13 @@ class EntryOut(BaseModel):
     tournament_id: str
     player_id: str
     player_name: str
+    double_entries: int = 0
     rebuys: int = 0
+    double_rebuys: int = 0
     addons_simple: int = 0
     super_addons: int = 0
     bonus: bool = False
+    total_chips: int = 0
     final_position: Optional[int] = None
     points: float = 0
     total_spent: float = 0
@@ -345,8 +358,6 @@ def set_auth_cookie(response: Response, token: str):
 async def login(body: LoginIn, response: Response, request: Request):
     email = body.email.lower().strip()
     # Behind ingress, request.client.host rotates; key the throttle by email (stable).
-    fwd = request.headers.get("X-Forwarded-For", "")
-    ip = fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
     identifier = f"email:{email}"
 
     # Brute force: 5 attempts in 15 min
@@ -602,7 +613,7 @@ async def delete_tournament(tid: str, _: dict = Depends(require_admin)):
 
 
 async def _recalc_entry(entry_id: str):
-    """Recalculate total_spent, paid_amount, pending_amount, debt_amount for an entry."""
+    """Recalculate financial totals and total_chips for an entry."""
     e = await db.entries.find_one({"id": entry_id}, {"_id": 0})
     if not e:
         return None
@@ -611,6 +622,18 @@ async def _recalc_entry(entry_id: str):
     paid = sum(c["amount"] for c in charges if c["payment_status"] == "paid")
     debt = sum(c["amount"] for c in charges if c["payment_status"] == "on_debt")
     pending = sum(c["amount"] for c in charges if c["payment_status"] == "pending")
+    # Chips count
+    t = await db.tournaments.find_one({"id": e["tournament_id"]}, {"_id": 0})
+    chips = 0
+    if t:
+        chips += int(t.get("chips_buy_in", 0))  # initial entry
+        chips += int(e.get("double_entries", 0)) * int(t.get("chips_double_buyin", 0))
+        chips += int(e.get("rebuys", 0)) * int(t.get("chips_rebuy", 0))
+        chips += int(e.get("double_rebuys", 0)) * int(t.get("chips_double_rebuy", 0))
+        chips += int(e.get("addons_simple", 0)) * int(t.get("chips_addon", 0))
+        chips += int(e.get("super_addons", 0)) * int(t.get("chips_super_addon", 0))
+        if e.get("bonus"):
+            chips += int(t.get("chips_bonus", 0))
     await db.entries.update_one(
         {"id": entry_id},
         {"$set": {
@@ -618,6 +641,7 @@ async def _recalc_entry(entry_id: str):
             "paid_amount": round(paid, 2),
             "debt_amount": round(debt, 2),
             "pending_amount": round(pending, 2),
+            "total_chips": chips,
         }},
     )
 
@@ -666,10 +690,13 @@ async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool =
         "tournament_id": tid,
         "player_id": player_id,
         "player_name": p["name"],
+        "double_entries": 0,
         "rebuys": 0,
+        "double_rebuys": 0,
         "addons_simple": 0,
         "super_addons": 0,
         "bonus": False,
+        "total_chips": 0,
         "final_position": None,
         "points": 0,
         "total_spent": 0,
@@ -691,7 +718,7 @@ async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool =
 
 @api.post("/entries/{entry_id}/action")
 async def entry_action(entry_id: str, action: str = Query(...), _: dict = Depends(get_current_user)):
-    """action ∈ rebuy | addon | super_addon | bonus | unbonus"""
+    """action ∈ rebuy | double_rebuy | addon | super_addon | bonus | double_entry"""
     e = await db.entries.find_one({"id": entry_id}, {"_id": 0})
     if not e:
         raise HTTPException(404, "Inscrição não encontrada")
@@ -702,6 +729,12 @@ async def entry_action(entry_id: str, action: str = Query(...), _: dict = Depend
     if action == "rebuy":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"rebuys": 1}})
         await _create_charge(e, "rebuy", float(t.get("rebuy", 0)), "Rebuy")
+    elif action == "double_rebuy":
+        await db.entries.update_one({"id": entry_id}, {"$inc": {"double_rebuys": 1}})
+        await _create_charge(e, "double_rebuy", float(t.get("double_rebuy", 0)), "Rebuy duplo")
+    elif action == "double_entry":
+        await db.entries.update_one({"id": entry_id}, {"$inc": {"double_entries": 1}})
+        await _create_charge(e, "double_entry", float(t.get("double_buyin", 0)), "Entrada dupla")
     elif action == "addon":
         await db.entries.update_one({"id": entry_id}, {"$inc": {"addons_simple": 1}})
         await _create_charge(e, "addon", float(t.get("addon_simple", 0)), "Add-on simples")
@@ -755,14 +788,17 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
     charges = await db.charges.find({"tournament_id": tid}, {"_id": 0}).to_list(5000)
 
     total_entries = len(entries)
+    total_double_entries = sum(e.get("double_entries", 0) for e in entries)
     total_rebuys = sum(e.get("rebuys", 0) for e in entries)
+    total_double_rebuys = sum(e.get("double_rebuys", 0) for e in entries)
     total_addons = sum(e.get("addons_simple", 0) for e in entries)
     total_super = sum(e.get("super_addons", 0) for e in entries)
     total_bonus = sum(1 for e in entries if e.get("bonus"))
+    total_chips = sum(e.get("total_chips", 0) for e in entries)
 
     gross = sum(c["amount"] for c in charges)
     rake_per_entry = float(t.get("rake", 0))
-    total_rake = rake_per_entry * total_entries
+    total_rake = rake_per_entry * (total_entries + total_double_entries)
     prize_pool = max(0.0, gross - total_rake)
 
     paid = sum(c["amount"] for c in charges if c["payment_status"] == "paid")
@@ -773,10 +809,13 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
         "tournament": t,
         "totals": {
             "entries": total_entries,
+            "double_entries": total_double_entries,
             "rebuys": total_rebuys,
+            "double_rebuys": total_double_rebuys,
             "addons": total_addons,
             "super_addons": total_super,
             "bonus": total_bonus,
+            "total_chips": total_chips,
             "gross": round(gross, 2),
             "rake": round(total_rake, 2),
             "prize_pool": round(prize_pool, 2),

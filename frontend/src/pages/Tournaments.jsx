@@ -34,10 +34,19 @@ export default function Tournaments() {
         start_at: new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16),
         buy_in: 100,
         rake: 20,
+        double_buyin: 200,
         rebuy: 100,
+        double_rebuy: 200,
         addon_simple: 50,
         super_addon: 100,
         bonus: 0,
+        chips_buy_in: 20000,
+        chips_double_buyin: 40000,
+        chips_rebuy: 20000,
+        chips_double_rebuy: 40000,
+        chips_addon: 10000,
+        chips_super_addon: 25000,
+        chips_bonus: 5000,
         point_structure_id: "",
         notes: "",
     });
@@ -110,13 +119,30 @@ export default function Tournaments() {
                                         <Input data-testid="tour-start-input" type="datetime-local" value={form.start_at} onChange={(e) => setForm({ ...form, start_at: e.target.value })} className="bg-surface-elevated border-white/10" />
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-3 gap-3">
-                                    <Money label="Buy-in" value={form.buy_in} on={(v) => setForm({ ...form, buy_in: v })} testid="tour-buyin" />
-                                    <Money label="Taxa (Rake)" value={form.rake} on={(v) => setForm({ ...form, rake: v })} testid="tour-rake" />
-                                    <Money label="Rebuy" value={form.rebuy} on={(v) => setForm({ ...form, rebuy: v })} testid="tour-rebuy" />
-                                    <Money label="Add-on simples" value={form.addon_simple} on={(v) => setForm({ ...form, addon_simple: v })} testid="tour-addon" />
-                                    <Money label="Super Add-on" value={form.super_addon} on={(v) => setForm({ ...form, super_addon: v })} testid="tour-superaddon" />
-                                    <Money label="Bônus / Staff" value={form.bonus} on={(v) => setForm({ ...form, bonus: v })} testid="tour-bonus" />
+                                <div className="space-y-2">
+                                    <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Valores (R$)</div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <Money label="Buy-in" value={form.buy_in} on={(v) => setForm({ ...form, buy_in: v })} testid="tour-buyin" />
+                                        <Money label="Taxa (Rake)" value={form.rake} on={(v) => setForm({ ...form, rake: v })} testid="tour-rake" />
+                                        <Money label="Entrada dupla" value={form.double_buyin} on={(v) => setForm({ ...form, double_buyin: v })} testid="tour-doublebuyin" />
+                                        <Money label="Rebuy" value={form.rebuy} on={(v) => setForm({ ...form, rebuy: v })} testid="tour-rebuy" />
+                                        <Money label="Rebuy duplo" value={form.double_rebuy} on={(v) => setForm({ ...form, double_rebuy: v })} testid="tour-doublerebuy" />
+                                        <Money label="Add-on" value={form.addon_simple} on={(v) => setForm({ ...form, addon_simple: v })} testid="tour-addon" />
+                                        <Money label="Super Add-on" value={form.super_addon} on={(v) => setForm({ ...form, super_addon: v })} testid="tour-superaddon" />
+                                        <Money label="Bônus / Staff" value={form.bonus} on={(v) => setForm({ ...form, bonus: v })} testid="tour-bonus" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Fichas por ação</div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <Chips label="Buy-in" value={form.chips_buy_in} on={(v) => setForm({ ...form, chips_buy_in: v })} testid="tour-chips-buyin" />
+                                        <Chips label="Entrada dupla" value={form.chips_double_buyin} on={(v) => setForm({ ...form, chips_double_buyin: v })} testid="tour-chips-doublebuyin" />
+                                        <Chips label="Rebuy" value={form.chips_rebuy} on={(v) => setForm({ ...form, chips_rebuy: v })} testid="tour-chips-rebuy" />
+                                        <Chips label="Rebuy duplo" value={form.chips_double_rebuy} on={(v) => setForm({ ...form, chips_double_rebuy: v })} testid="tour-chips-doublerebuy" />
+                                        <Chips label="Add-on" value={form.chips_addon} on={(v) => setForm({ ...form, chips_addon: v })} testid="tour-chips-addon" />
+                                        <Chips label="Super Add-on" value={form.chips_super_addon} on={(v) => setForm({ ...form, chips_super_addon: v })} testid="tour-chips-superaddon" />
+                                        <Chips label="Bônus" value={form.chips_bonus} on={(v) => setForm({ ...form, chips_bonus: v })} testid="tour-chips-bonus" />
+                                    </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-xs uppercase tracking-widest text-muted-foreground">Estrutura de pontos</Label>
@@ -189,5 +215,15 @@ const Money = ({ label, value, on, testid }) => (
     <div className="space-y-1.5">
         <Label className="text-xs uppercase tracking-widest text-muted-foreground">{label}</Label>
         <Input data-testid={testid} type="number" min="0" step="0.01" value={value} onChange={(e) => on(e.target.value)} className="bg-surface-elevated border-white/10 font-mono" />
+    </div>
+);
+
+const Chips = ({ label, value, on, testid }) => (
+    <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-widest text-muted-foreground">{label}</Label>
+        <div className="relative">
+            <Input data-testid={testid} type="number" min="0" step="500" value={value} onChange={(e) => on(e.target.value)} className="bg-surface-elevated border-white/10 font-mono pr-10" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-muted-foreground">fichas</span>
+        </div>
     </div>
 );

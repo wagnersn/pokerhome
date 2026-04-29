@@ -14,7 +14,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2 } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, CircleDollarSign, Layers } from "lucide-react";
 import { fmtBRL, fmtDateTime, apiErr, fmtNumber } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -72,10 +72,20 @@ export default function TournamentDetail() {
         return () => clearTimeout(t);
     }, [search]);
 
+    const ACTION_LABEL = {
+        rebuy: "Rebuy", double_rebuy: "Rebuy duplo", double_entry: "Entrada dupla",
+        addon: "Add-on", super_addon: "Super Add-on", bonus: "Bônus",
+    };
+    const ACTION_CHIPS = {
+        rebuy: "chips_rebuy", double_rebuy: "chips_double_rebuy", double_entry: "chips_double_buyin",
+        addon: "chips_addon", super_addon: "chips_super_addon", bonus: "chips_bonus",
+    };
+
     const action = async (entryId, act) => {
         try {
             await api.post(`/entries/${entryId}/action?action=${act}`);
-            toast.success(`Ação ${act} registrada`);
+            const chips = Number(t?.[ACTION_CHIPS[act]] || 0);
+            toast.success(`${ACTION_LABEL[act]} registrado${chips ? ` · +${chips.toLocaleString("pt-BR")} fichas` : ""}`);
             load();
         } catch (e) {
             toast.error(apiErr(e));
@@ -165,20 +175,21 @@ export default function TournamentDetail() {
                     </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
-                    <Pill label="Buy-in" v={fmtBRL(t.buy_in + t.rake)} />
-                    <Pill label="Rebuy" v={fmtBRL(t.rebuy)} />
-                    <Pill label="Add-on" v={fmtBRL(t.addon_simple)} />
-                    <Pill label="Super" v={fmtBRL(t.super_addon)} />
-                    <Pill label="Bônus" v={fmtBRL(t.bonus)} />
-                    <Pill label="Rake" v={fmtBRL(t.rake)} />
+                    <Pill label="Buy-in" v={fmtBRL(t.buy_in + t.rake)} sub={`${fmtNumber(t.chips_buy_in || 0)} fichas`} />
+                    <Pill label="Entrada dupla" v={fmtBRL(t.double_buyin || 0)} sub={`${fmtNumber(t.chips_double_buyin || 0)} fichas`} />
+                    <Pill label="Rebuy" v={fmtBRL(t.rebuy)} sub={`${fmtNumber(t.chips_rebuy || 0)} fichas`} />
+                    <Pill label="Rebuy duplo" v={fmtBRL(t.double_rebuy || 0)} sub={`${fmtNumber(t.chips_double_rebuy || 0)} fichas`} />
+                    <Pill label="Add-on / Super" v={`${fmtBRL(t.addon_simple)} · ${fmtBRL(t.super_addon)}`} sub={`${fmtNumber(t.chips_addon || 0)}/${fmtNumber(t.chips_super_addon || 0)}`} />
+                    <Pill label="Bônus" v={fmtBRL(t.bonus)} sub={`${fmtNumber(t.chips_bonus || 0)} fichas`} />
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                <FinStat icon={Users2} label="Inscrições" v={fmtNumber(totals.entries)} />
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+                <FinStat icon={Users2} label="Inscrições" v={`${fmtNumber(totals.entries)}${totals.double_entries ? ` (+${totals.double_entries})` : ""}`} />
                 <FinStat icon={Coins} label="Bruto" v={fmtBRL(totals.gross)} />
                 <FinStat icon={Crown} label="Rake" v={fmtBRL(totals.rake)} accent="warning" />
                 <FinStat icon={Trophy} label="Prize Pool" v={fmtBRL(totals.prize_pool)} accent="success" />
+                <FinStat icon={Layers} label="Fichas em Jogo" v={fmtNumber(totals.total_chips || 0)} accent="primary" />
             </div>
 
             {/* Inscrições + ações */}
@@ -235,10 +246,13 @@ export default function TournamentDetail() {
                         <thead>
                             <tr className="bg-surface-elevated text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                                 <th className="text-left py-3 px-4">Jogador</th>
+                                <th className="text-center py-3 px-2" title="Entrada dupla">2x</th>
                                 <th className="text-center py-3 px-2">Re</th>
+                                <th className="text-center py-3 px-2" title="Rebuy duplo">Re2x</th>
                                 <th className="text-center py-3 px-2">Add</th>
                                 <th className="text-center py-3 px-2">Sup</th>
                                 <th className="text-center py-3 px-2">Bn</th>
+                                <th className="text-right py-3 px-4">Fichas</th>
                                 <th className="text-right py-3 px-4">Total</th>
                                 <th className="text-right py-3 px-4">Pago</th>
                                 <th className="text-right py-3 px-4">Pos.</th>
@@ -246,17 +260,20 @@ export default function TournamentDetail() {
                             </tr>
                         </thead>
                         <tbody>
-                            {entries.length === 0 && <tr><td colSpan={9} className="text-center text-muted-foreground py-12">Nenhuma inscrição.</td></tr>}
+                            {entries.length === 0 && <tr><td colSpan={12} className="text-center text-muted-foreground py-12">Nenhuma inscrição.</td></tr>}
                             {entries.map((e) => (
                                 <tr key={e.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                                     <td className="py-3 px-4">
                                         <Link to={`/jogadores/${e.player_id}`} className="font-medium hover:text-primary">{e.player_name}</Link>
                                         {e.pending_amount > 0 && <div className="text-[10px] text-warning uppercase tracking-widest mt-0.5">Pendente {fmtBRL(e.pending_amount)}</div>}
                                     </td>
+                                    <td className="text-center font-mono">{e.double_entries || 0}</td>
                                     <td className="text-center font-mono">{e.rebuys}</td>
+                                    <td className="text-center font-mono">{e.double_rebuys || 0}</td>
                                     <td className="text-center font-mono">{e.addons_simple}</td>
                                     <td className="text-center font-mono">{e.super_addons}</td>
                                     <td className="text-center">{e.bonus ? "✓" : "—"}</td>
+                                    <td className="text-right font-mono text-primary font-semibold">{fmtNumber(e.total_chips || 0)}</td>
                                     <td className="text-right font-mono">{fmtBRL(e.total_spent)}</td>
                                     <td className="text-right font-mono text-success">{fmtBRL(e.paid_amount)}</td>
                                     <td className="text-right">
@@ -269,10 +286,12 @@ export default function TournamentDetail() {
                                         )}
                                     </td>
                                     <td className="py-3 px-4">
-                                        <div className="flex items-center justify-end gap-1">
+                                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                                            <ActBtn label="Entrada dupla" icon={CircleDollarSign} onClick={() => action(e.id, "double_entry")} testid={`act-double-entry-${e.id}`} />
                                             <ActBtn label="Rebuy" icon={RotateCw} onClick={() => action(e.id, "rebuy")} testid={`act-rebuy-${e.id}`} />
+                                            <ActBtn label="Rebuy duplo" icon={RefreshCw} onClick={() => action(e.id, "double_rebuy")} testid={`act-double-rebuy-${e.id}`} />
                                             <ActBtn label="Add-on" icon={PackagePlus} onClick={() => action(e.id, "addon")} testid={`act-addon-${e.id}`} />
-                                            <ActBtn label="Super" icon={RefreshCw} onClick={() => action(e.id, "super_addon")} testid={`act-super-${e.id}`} />
+                                            <ActBtn label="Super" icon={Layers} onClick={() => action(e.id, "super_addon")} testid={`act-super-${e.id}`} />
                                             <ActBtn label="Bônus" icon={Sparkles} onClick={() => action(e.id, "bonus")} disabled={e.bonus} testid={`act-bonus-${e.id}`} accent />
                                         </div>
                                     </td>
@@ -354,10 +373,11 @@ export default function TournamentDetail() {
     );
 }
 
-const Pill = ({ label, v }) => (
+const Pill = ({ label, v, sub }) => (
     <div className="rounded-lg bg-surface-elevated border border-white/5 px-3 py-2">
         <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
         <div className="font-mono text-sm font-semibold">{v}</div>
+        {sub && <div className="text-[10px] text-primary/80 font-mono mt-0.5">{sub}</div>}
     </div>
 );
 
