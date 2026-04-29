@@ -14,7 +14,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, CircleDollarSign, Layers, Skull, RotateCcw, Calculator, Edit3 } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, RotateCw, PackagePlus, Crown, Sparkles, Flag, Trophy, Coins, Users2, Layers, Skull, RotateCcw, Calculator, Edit3 } from "lucide-react";
 import { fmtBRL, fmtDateTime, apiErr, fmtNumber } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -52,6 +52,7 @@ export default function TournamentDetail() {
     const [chipDialog, setChipDialog] = useState(null); // entry being edited
     const [chipValue, setChipValue] = useState("");
     const [countMode, setCountMode] = useState(false);
+    const [entryType, setEntryType] = useState("simple"); // simple | double for new enrollment
 
     const load = useCallback(async () => {
         const [t, e, s] = await Promise.all([
@@ -76,11 +77,11 @@ export default function TournamentDetail() {
     }, [search]);
 
     const ACTION_LABEL = {
-        rebuy: "Rebuy", double_rebuy: "Rebuy duplo", double_entry: "Entrada dupla",
+        rebuy: "Rebuy", double_rebuy: "Rebuy duplo",
         addon: "Add-on", super_addon: "Super Add-on", bonus: "Bônus",
     };
     const ACTION_CHIPS = {
-        rebuy: "chips_rebuy", double_rebuy: "chips_double_rebuy", double_entry: "chips_double_buyin",
+        rebuy: "chips_rebuy", double_rebuy: "chips_double_rebuy",
         addon: "chips_addon", super_addon: "chips_super_addon", bonus: "chips_bonus",
     };
 
@@ -98,11 +99,12 @@ export default function TournamentDetail() {
     const enroll = async (allowDebt = false) => {
         if (!selectedPlayer) return;
         try {
-            await api.post(`/tournaments/${id}/entries?player_id=${selectedPlayer}&allow_debt=${allowDebt}`);
-            toast.success("Jogador inscrito");
+            await api.post(`/tournaments/${id}/entries?player_id=${selectedPlayer}&entry_type=${entryType}&allow_debt=${allowDebt}`);
+            toast.success(`Jogador inscrito (${entryType === "double" ? "entrada dupla" : "entrada simples"})`);
             setAddOpen(false);
             setSelectedPlayer("");
             setSearch("");
+            setEntryType("simple");
             setDebtConfirm(null);
             load();
         } catch (e) {
@@ -185,11 +187,12 @@ export default function TournamentDetail() {
             <div className="rounded-2xl bg-surface border border-white/5 p-6 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
-                        <div className="text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-1">{t.type}</div>
+                        <div className="text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-1">{t.type}{t.is_freeroll && " · Freeroll"}</div>
                         <h1 className="text-3xl font-heading font-bold tracking-tight">{t.name}</h1>
                         <div className="text-sm text-muted-foreground mt-1">{fmtDateTime(t.start_at)}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                        {t.is_freeroll && <span className="text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full bg-success/15 text-success border border-success/30">Freeroll</span>}
                         <span className={`text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full ${status.cls}`}>{status.label}</span>
                         {user?.role === "admin" && (
                             <Select value={t.status} onValueChange={setStatus}>
@@ -206,8 +209,8 @@ export default function TournamentDetail() {
                     </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
-                    <Pill label="Buy-in" v={fmtBRL(t.buy_in + t.rake)} sub={`${fmtNumber(t.chips_buy_in || 0)} fichas`} />
-                    <Pill label="Entrada dupla" v={fmtBRL(t.double_buyin || 0)} sub={`${fmtNumber(t.chips_double_buyin || 0)} fichas`} />
+                    <Pill label={t.is_freeroll ? "Buy-in" : "Buy-in"} v={t.is_freeroll ? "Gratuito" : fmtBRL(t.buy_in + t.rake)} sub={`${fmtNumber(t.chips_buy_in || 0)} fichas`} />
+                    <Pill label="Entrada dupla" v={t.is_freeroll ? "—" : fmtBRL((t.double_buyin || 0) + (t.rake || 0))} sub={`${fmtNumber(t.chips_double_buyin || 0)} fichas`} />
                     <Pill label="Rebuy" v={fmtBRL(t.rebuy)} sub={`${fmtNumber(t.chips_rebuy || 0)} fichas`} />
                     <Pill label="Rebuy duplo" v={fmtBRL(t.double_rebuy || 0)} sub={`${fmtNumber(t.chips_double_rebuy || 0)} fichas`} />
                     <Pill label="Add-on / Super" v={`${fmtBRL(t.addon_simple)} · ${fmtBRL(t.super_addon)}`} sub={`${fmtNumber(t.chips_addon || 0)}/${fmtNumber(t.chips_super_addon || 0)}`} />
@@ -288,6 +291,30 @@ export default function TournamentDetail() {
                                     <DialogTitle>Inscrever jogador</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-3">
+                                    {!t.is_freeroll && (t.double_buyin || 0) > 0 && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                data-testid="entry-type-simple"
+                                                onClick={() => setEntryType("simple")}
+                                                className={`rounded-lg px-3 py-3 text-left border transition-all ${entryType === "simple" ? "bg-primary/10 border-primary/30 text-primary" : "bg-surface-elevated border-white/5 hover:border-white/15"}`}
+                                            >
+                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Entrada simples</div>
+                                                <div className="font-mono font-semibold mt-0.5">{fmtBRL((t.buy_in || 0) + (t.rake || 0))}</div>
+                                                <div className="text-[10px] text-muted-foreground font-mono">{fmtNumber(t.chips_buy_in || 0)} fichas</div>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid="entry-type-double"
+                                                onClick={() => setEntryType("double")}
+                                                className={`rounded-lg px-3 py-3 text-left border transition-all ${entryType === "double" ? "bg-primary/10 border-primary/30 text-primary" : "bg-surface-elevated border-white/5 hover:border-white/15"}`}
+                                            >
+                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Entrada dupla</div>
+                                                <div className="font-mono font-semibold mt-0.5">{fmtBRL((t.double_buyin || 0) + (t.rake || 0))}</div>
+                                                <div className="text-[10px] text-muted-foreground font-mono">{fmtNumber(t.chips_double_buyin || 0)} fichas</div>
+                                            </button>
+                                        </div>
+                                    )}
                                     <Input data-testid="entry-search-input" placeholder="Buscar jogador..." value={search} onChange={(e) => setSearch(e.target.value)} className="bg-surface-elevated border-white/10" />
                                     <div className="max-h-72 overflow-y-auto scrollbar-thin space-y-1">
                                         {players.map((p) => (
@@ -320,7 +347,6 @@ export default function TournamentDetail() {
                         <thead>
                             <tr className="bg-surface-elevated text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                                 <th className="text-left py-3 px-4">Jogador</th>
-                                <th className="text-center py-3 px-2" title="Entrada dupla">2x</th>
                                 <th className="text-center py-3 px-2">Re</th>
                                 <th className="text-center py-3 px-2" title="Rebuy duplo">Re2x</th>
                                 <th className="text-center py-3 px-2">Add</th>
@@ -334,7 +360,7 @@ export default function TournamentDetail() {
                             </tr>
                         </thead>
                         <tbody>
-                            {entries.length === 0 && <tr><td colSpan={12} className="text-center text-muted-foreground py-12">Nenhuma inscrição.</td></tr>}
+                            {entries.length === 0 && <tr><td colSpan={11} className="text-center text-muted-foreground py-12">Nenhuma inscrição.</td></tr>}
                             {entries.map((e) => {
                                 const isElim = e.status === "eliminated";
                                 const isFinal = e.status === "finalized";
@@ -342,13 +368,13 @@ export default function TournamentDetail() {
                                 return (
                                 <tr key={e.id} data-testid={`entry-row-${e.id}`} className={`border-t border-white/5 hover:bg-white/[0.02] ${isElim ? "opacity-50" : ""}`}>
                                     <td className="py-3 px-4">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
                                             <Link to={`/jogadores/${e.player_id}`} className="font-medium hover:text-primary">{e.player_name}</Link>
+                                            {e.entry_type === "double" && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">2x</span>}
                                             {isElim && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/30">Eliminado</span>}
                                         </div>
                                         {e.pending_amount > 0 && <div className="text-[10px] text-warning uppercase tracking-widest mt-0.5">Pendente {fmtBRL(e.pending_amount)}</div>}
                                     </td>
-                                    <td className="text-center font-mono">{e.double_entries || 0}</td>
                                     <td className="text-center font-mono">{e.rebuys}</td>
                                     <td className="text-center font-mono">{e.double_rebuys || 0}</td>
                                     <td className="text-center font-mono">{e.addons_simple}</td>
@@ -388,7 +414,6 @@ export default function TournamentDetail() {
                                                 </Button>
                                             ) : (
                                                 <>
-                                                    <ActBtn label="Entrada dupla" icon={CircleDollarSign} onClick={() => action(e.id, "double_entry")} testid={`act-double-entry-${e.id}`} />
                                                     <ActBtn label="Rebuy" icon={RotateCw} onClick={() => action(e.id, "rebuy")} testid={`act-rebuy-${e.id}`} />
                                                     <ActBtn label="Rebuy duplo" icon={RefreshCw} onClick={() => action(e.id, "double_rebuy")} testid={`act-double-rebuy-${e.id}`} />
                                                     <ActBtn label="Add-on" icon={PackagePlus} onClick={() => action(e.id, "addon")} testid={`act-addon-${e.id}`} />

@@ -129,6 +129,7 @@ class TournamentIn(BaseModel):
     name: str
     type: str  # e.g. "NLHE Daily", "Omaha", "High Roller"
     start_at: str  # ISO datetime
+    is_freeroll: bool = False
     buy_in: float = 0
     rake: float = 0
     double_buyin: float = 0
@@ -161,7 +162,7 @@ class EntryOut(BaseModel):
     tournament_id: str
     player_id: str
     player_name: str
-    double_entries: int = 0
+    entry_type: Literal["simple", "double"] = "simple"
     rebuys: int = 0
     double_rebuys: int = 0
     addons_simple: int = 0
@@ -628,8 +629,11 @@ async def _recalc_entry(entry_id: str):
     t = await db.tournaments.find_one({"id": e["tournament_id"]}, {"_id": 0})
     chips = 0
     if t:
-        chips += int(t.get("chips_buy_in", 0))  # initial entry
-        chips += int(e.get("double_entries", 0)) * int(t.get("chips_double_buyin", 0))
+        # Initial chips depend on entry type
+        if e.get("entry_type") == "double":
+            chips += int(t.get("chips_double_buyin", 0))
+        else:
+            chips += int(t.get("chips_buy_in", 0))
         chips += int(e.get("rebuys", 0)) * int(t.get("chips_rebuy", 0))
         chips += int(e.get("double_rebuys", 0)) * int(t.get("chips_double_rebuy", 0))
         chips += int(e.get("addons_simple", 0)) * int(t.get("chips_addon", 0))
@@ -675,7 +679,13 @@ async def list_entries(tid: str, _: dict = Depends(get_current_user)):
 
 
 @api.post("/tournaments/{tid}/entries", response_model=EntryOut)
-async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool = Query(False), _: dict = Depends(get_current_user)):
+async def create_entry(
+    tid: str,
+    player_id: str = Query(...),
+    entry_type: Literal["simple", "double"] = Query("simple"),
+    allow_debt: bool = Query(False),
+    _: dict = Depends(get_current_user),
+):
     t = await db.tournaments.find_one({"id": tid}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Torneio não encontrado")
@@ -687,19 +697,22 @@ async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool =
     if await db.entries.find_one({"tournament_id": tid, "player_id": player_id}):
         raise HTTPException(400, "Jogador já inscrito neste torneio")
 
+    is_freeroll = bool(t.get("is_freeroll"))
+    initial_chips = int(t.get("chips_double_buyin" if entry_type == "double" else "chips_buy_in", 0))
+
     entry = {
         "id": gen_id(),
         "tournament_id": tid,
         "player_id": player_id,
         "player_name": p["name"],
-        "double_entries": 0,
+        "entry_type": entry_type,
         "rebuys": 0,
         "double_rebuys": 0,
         "addons_simple": 0,
         "super_addons": 0,
         "bonus": False,
-        "total_chips": int(t.get("chips_buy_in", 0)),
-        "current_chips": int(t.get("chips_buy_in", 0)),
+        "total_chips": initial_chips,
+        "current_chips": initial_chips,
         "eliminated_at": None,
         "final_position": None,
         "points": 0,
@@ -711,10 +724,14 @@ async def create_entry(tid: str, player_id: str = Query(...), allow_debt: bool =
         "created_at": iso(now_utc()),
     }
     await db.entries.insert_one(entry)
-    # Buy-in charge
-    buyin_total = float(t.get("buy_in", 0)) + float(t.get("rake", 0))
-    if buyin_total > 0:
-        await _create_charge(entry, "buyin", buyin_total, f"Buy-in: {t['name']}")
+    # Buy-in charge (skip if freeroll). Rake is charged ONCE here regardless of entry type.
+    if not is_freeroll:
+        buyin_value = float(t.get("double_buyin" if entry_type == "double" else "buy_in", 0))
+        rake_value = float(t.get("rake", 0))
+        total = buyin_value + rake_value
+        if total > 0:
+            label = "Entrada dupla" if entry_type == "double" else "Buy-in"
+            await _create_charge(entry, "buyin", total, f"{label}: {t['name']}")
     await _recalc_entry(entry["id"])
     e = await db.entries.find_one({"id": entry["id"]}, {"_id": 0})
     return EntryOut(**e)
@@ -838,7 +855,8 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
     charges = await db.charges.find({"tournament_id": tid}, {"_id": 0}).to_list(5000)
 
     total_entries = len(entries)
-    total_double_entries = sum(e.get("double_entries", 0) for e in entries)
+    simple_entries = sum(1 for e in entries if e.get("entry_type", "simple") == "simple")
+    double_entries = sum(1 for e in entries if e.get("entry_type") == "double")
     total_rebuys = sum(e.get("rebuys", 0) for e in entries)
     total_double_rebuys = sum(e.get("double_rebuys", 0) for e in entries)
     total_addons = sum(e.get("addons_simple", 0) for e in entries)
@@ -862,7 +880,9 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
 
     gross = sum(c["amount"] for c in charges)
     rake_per_entry = float(t.get("rake", 0))
-    total_rake = rake_per_entry * (total_entries + total_double_entries)
+    # Rake é cobrado UMA VEZ por inscrição (no buy-in) — não recobrado em rebuys/addons.
+    # Independe de ser entrada simples ou dupla.
+    total_rake = 0.0 if t.get("is_freeroll") else rake_per_entry * total_entries
     prize_pool = max(0.0, gross - total_rake)
 
     paid = sum(c["amount"] for c in charges if c["payment_status"] == "paid")
@@ -873,7 +893,8 @@ async def tournament_summary(tid: str, _: dict = Depends(get_current_user)):
         "tournament": t,
         "totals": {
             "entries": total_entries,
-            "double_entries": total_double_entries,
+            "simple_entries": simple_entries,
+            "double_entries": double_entries,
             "rebuys": total_rebuys,
             "double_rebuys": total_double_rebuys,
             "addons": total_addons,

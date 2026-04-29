@@ -31,6 +31,7 @@ export default function Tournaments() {
     const [form, setForm] = useState({
         name: "",
         type: "NLHE Daily",
+        is_freeroll: false,
         start_at: new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16),
         buy_in: 100,
         rake: 20,
@@ -105,6 +106,20 @@ export default function Tournaments() {
                                 <DialogTitle>Cadastrar torneio</DialogTitle>
                             </DialogHeader>
                             <form onSubmit={submit} className="space-y-4">
+                                <label className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-elevated border border-white/5 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.is_freeroll}
+                                        onChange={(e) => setForm({ ...form, is_freeroll: e.target.checked })}
+                                        data-testid="tour-freeroll-toggle"
+                                        className="size-4 accent-primary"
+                                    />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-semibold">Freeroll</div>
+                                        <div className="text-xs text-muted-foreground">Sem buy-in nem rake. Rebuys e add-ons opcionais com seus próprios valores.</div>
+                                    </div>
+                                    {form.is_freeroll && <span className="text-[10px] uppercase tracking-widest px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">Ativo</span>}
+                                </label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5 col-span-2">
                                         <Label className="text-xs uppercase tracking-widest text-muted-foreground">Nome</Label>
@@ -120,17 +135,18 @@ export default function Tournaments() {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Valores (R$)</div>
+                                    <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Valores (R$){form.is_freeroll && " · entrada gratuita"}</div>
                                     <div className="grid grid-cols-3 gap-3">
-                                        <Money label="Buy-in" value={form.buy_in} on={(v) => setForm({ ...form, buy_in: v })} testid="tour-buyin" />
-                                        <Money label="Taxa (Rake)" value={form.rake} on={(v) => setForm({ ...form, rake: v })} testid="tour-rake" />
-                                        <Money label="Entrada dupla" value={form.double_buyin} on={(v) => setForm({ ...form, double_buyin: v })} testid="tour-doublebuyin" />
+                                        <Money label="Buy-in" value={form.buy_in} on={(v) => setForm({ ...form, buy_in: v })} testid="tour-buyin" disabled={form.is_freeroll} />
+                                        <Money label="Taxa (Rake)" value={form.rake} on={(v) => setForm({ ...form, rake: v })} testid="tour-rake" disabled={form.is_freeroll} />
+                                        <Money label="Entrada dupla" value={form.double_buyin} on={(v) => setForm({ ...form, double_buyin: v })} testid="tour-doublebuyin" disabled={form.is_freeroll} />
                                         <Money label="Rebuy" value={form.rebuy} on={(v) => setForm({ ...form, rebuy: v })} testid="tour-rebuy" />
                                         <Money label="Rebuy duplo" value={form.double_rebuy} on={(v) => setForm({ ...form, double_rebuy: v })} testid="tour-doublerebuy" />
                                         <Money label="Add-on" value={form.addon_simple} on={(v) => setForm({ ...form, addon_simple: v })} testid="tour-addon" />
                                         <Money label="Super Add-on" value={form.super_addon} on={(v) => setForm({ ...form, super_addon: v })} testid="tour-superaddon" />
                                         <Money label="Bônus / Staff" value={form.bonus} on={(v) => setForm({ ...form, bonus: v })} testid="tour-bonus" />
                                     </div>
+                                    <div className="text-[10px] text-muted-foreground italic">Rake é cobrado apenas na 1ª inscrição (igual para entrada simples e dupla). Rebuys e add-ons não geram rake adicional.</div>
                                 </div>
                                 <div className="space-y-2">
                                     <div className="text-[10px] uppercase tracking-[0.22em] text-primary">Fichas por ação</div>
@@ -186,7 +202,10 @@ export default function Tournaments() {
                                 <div className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
                                     <Trophy className="size-5 text-primary" strokeWidth={1.6} />
                                 </div>
-                                <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full ${s.cls}`}>{s.label}</span>
+                                <div className="flex items-center gap-1.5">
+                                    {t.is_freeroll && <span className="text-[10px] uppercase tracking-widest px-2 py-1 rounded-full bg-success/15 text-success border border-success/30">Freeroll</span>}
+                                    <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full ${s.cls}`}>{s.label}</span>
+                                </div>
                             </div>
                             <div className="mt-4 font-heading text-lg font-semibold tracking-tight group-hover:text-primary">{t.name}</div>
                             <div className="text-xs text-muted-foreground">{t.type}</div>
@@ -195,8 +214,8 @@ export default function Tournaments() {
                             </div>
                             <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
                                 <div>
-                                    <div className="text-muted-foreground text-[10px] uppercase tracking-widest">Buy-in</div>
-                                    <div className="font-mono font-semibold">{fmtBRL(t.buy_in + t.rake)}</div>
+                                    <div className="text-muted-foreground text-[10px] uppercase tracking-widest">{t.is_freeroll ? "Entrada" : "Buy-in"}</div>
+                                    <div className="font-mono font-semibold">{t.is_freeroll ? "Gratuita" : fmtBRL(t.buy_in + t.rake)}</div>
                                 </div>
                                 <div>
                                     <div className="text-muted-foreground text-[10px] uppercase tracking-widest">Rebuy</div>
@@ -211,10 +230,10 @@ export default function Tournaments() {
     );
 }
 
-const Money = ({ label, value, on, testid }) => (
+const Money = ({ label, value, on, testid, disabled }) => (
     <div className="space-y-1.5">
         <Label className="text-xs uppercase tracking-widest text-muted-foreground">{label}</Label>
-        <Input data-testid={testid} type="number" min="0" step="0.01" value={value} onChange={(e) => on(e.target.value)} className="bg-surface-elevated border-white/10 font-mono" />
+        <Input data-testid={testid} type="number" min="0" step="0.01" value={value} onChange={(e) => on(e.target.value)} disabled={disabled} className="bg-surface-elevated border-white/10 font-mono disabled:opacity-40" />
     </div>
 );
 
