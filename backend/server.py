@@ -1068,7 +1068,7 @@ async def rake_history(days: int = 30, _: dict = Depends(get_current_user)):
     txs = await db.transactions.find({
         "created_at": {"$gte": iso(start)},
         "description": {"$regex": "(Rake|Jackpot)"}
-    }).sort("created_at", -1).to_list(2000)
+    }, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return txs
 
 
