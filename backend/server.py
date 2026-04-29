@@ -1256,6 +1256,28 @@ async def close_table(tid: str, payload: dict = Body(None), _: dict = Depends(re
             "description": f"Jackpot: {name}",
             "created_at": iso(now_utc()),
         })
+    
+    # Record the PROJECTION once at table close for audit
+    # Get total buy-ins and cashouts for this table session
+    charges = await db.charges.find({"table_id": tid, "created_at": {"$gte": t.get("opened_at") or ""}}).to_list(1000)
+    bi = sum(float(c["amount"]) for c in charges if c["type"] == "cash_buyin")
+    co = sum(float(c["amount"]) for c in charges if c["type"] == "cash_cashout")
+    balance = bi - co
+    if balance > 0:
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "projection_rake",
+            "amount": round(balance * 0.7143, 2),
+            "description": f"Projeção Final Rake: {name}",
+            "created_at": iso(now_utc()),
+        })
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "projection_jackpot",
+            "amount": round(balance * 0.2857, 2),
+            "description": f"Projeção Final Jackpot: {name}",
+            "created_at": iso(now_utc()),
+        })
         
     return {"ok": True}
 
@@ -1420,29 +1442,9 @@ async def cashout_player(
         rake_amt = round(house_win * 0.7143, 2)
         jackpot_amt = round(house_win * 0.2857, 2)
         
-        if rake_amt > 0:
-            await db.transactions.insert_one({
-                "id": gen_id(),
-                "type": "projection_rake",
-                "player_id": "house",
-                "amount": rake_amt,
-                "payment_method": "cash",
-                "description": f"Projeção Rake (Auto): {w['player_name']}",
-                "session_id": wid,
-                "created_at": iso(now_utc()),
-            })
-        if jackpot_amt > 0:
-            await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": jackpot_amt}}, upsert=True)
-            await db.transactions.insert_one({
-                "id": gen_id(),
-                "type": "projection_jackpot",
-                "player_id": "house",
-                "amount": jackpot_amt,
-                "payment_method": "cash",
-                "description": f"Projeção Jackpot (Auto): {w['player_name']}",
-                "session_id": wid,
-                "created_at": iso(now_utc()),
-            })
+        # We no longer record projections per player to avoid "double projection".
+        # Projections will be recorded only once when the table closes.
+        pass
 
     # If a settlement method (Cash/PIX) is used, record transaction and clear the session debt
     if method != "debt":
