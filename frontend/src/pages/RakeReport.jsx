@@ -20,8 +20,8 @@ export default function RakeReport() {
     useEffect(() => { load(); }, []);
 
     // Filter real transactions (Manual entries)
-    const realRake = history.filter(t => t.type === "income" && t.description.includes("Rake")).reduce((s, t) => s + t.amount, 0);
-    const realJack = history.filter(t => (t.type === "income" || t.type === "jackpot_in") && t.description.includes("Jackpot")).reduce((s, t) => s + t.amount, 0);
+    const realRake = history.filter(t => t.type === "income" && t?.description?.includes("Rake")).reduce((s, t) => s + t.amount, 0);
+    const realJack = history.filter(t => (t.type === "income" || t.type === "jackpot_in") && t?.description?.includes("Jackpot")).reduce((s, t) => s + t.amount, 0);
 
     // Filter projections (Automatic calculations)
     const projRake = history.filter(t => t.type === "projection_rake").reduce((s, t) => s + t.amount, 0);
