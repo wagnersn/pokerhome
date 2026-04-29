@@ -13,7 +13,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { fmtBRL, fmtDateTime, apiErr } from "@/lib/format";
-import { Wallet, Banknote, CreditCard, AlertTriangle, Coins, ReceiptText, Plus } from "lucide-react";
+import { Wallet, Banknote, CreditCard, AlertTriangle, Coins, ReceiptText, Plus, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Cashier() {
