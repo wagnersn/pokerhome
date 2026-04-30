@@ -58,15 +58,20 @@ async def get_table_summary(tid: str, _: dict = Depends(get_current_user)):
     co = sum(float(c["amount"]) for c in charges if c["type"] == "cash_cashout")
     balance = bi - co
     
-    rp = t.get("rake_percent", 5.0) / 100.0
+    rp = t.get("rake_percent", 5.0)
     rc = t.get("rake_cap", 0.0)
-    jp = t.get("jackpot_percent", 2.0) / 100.0
+    jp = t.get("jackpot_percent", 2.0)
     jc = t.get("jackpot_cap", 0.0)
     
-    proj_rake = balance * rp
+    total_percent = rp + jp
+    if total_percent > 0:
+        proj_rake = balance * (rp / total_percent)
+        proj_jack = balance * (jp / total_percent)
+    else:
+        proj_rake = 0.0
+        proj_jack = 0.0
+
     if rc > 0: proj_rake = min(proj_rake, rc)
-    
-    proj_jack = balance * jp
     if jc > 0: proj_jack = min(proj_jack, jc)
     
     return CashTableSummary(
@@ -114,14 +119,20 @@ async def close_table(tid: str, payload: dict = Body(...), _: dict = Depends(req
     co = sum(float(c["amount"]) for c in charges if c["type"] == "cash_cashout")
     balance = bi - co
     if balance > 0:
-        rp = t.get("rake_percent", 5.0) / 100.0
+        rp = t.get("rake_percent", 5.0)
         rc = t.get("rake_cap", 0.0)
-        jp = t.get("jackpot_percent", 2.0) / 100.0
+        jp = t.get("jackpot_percent", 2.0)
         jc = t.get("jackpot_cap", 0.0)
         
-        proj_rake = balance * rp
+        total_percent = rp + jp
+        if total_percent > 0:
+            proj_rake = balance * (rp / total_percent)
+            proj_jack = balance * (jp / total_percent)
+        else:
+            proj_rake = 0.0
+            proj_jack = 0.0
+            
         if rc > 0: proj_rake = min(proj_rake, rc)
-        proj_jack = balance * jp
         if jc > 0: proj_jack = min(proj_jack, jc)
         
         await db.transactions.insert_one({
