@@ -59,7 +59,7 @@ export default function CashGames() {
                 api.get("/dealers")
             ]);
             setTables(tablesRes.data);
-            setPlayers(playersRes.data);
+            setPlayers(playersRes.data.items || playersRes.data);
             setJackpotBalance(jackpotRes.data.balance || 0);
             setDealers(dealersRes.data.filter(d => d.active));
             const wls = {};

@@ -20,6 +20,7 @@ import PointStructures from "@/pages/PointStructures";
 import Users from "@/pages/Users";
 import RakeReport from "@/pages/RakeReport";
 import Dealers from "@/pages/Dealers";
+import MarketingReport from "@/pages/MarketingReport";
 
 function App() {
     return (
@@ -46,6 +47,7 @@ function App() {
                             <Route path="/cash-games" element={<CashGames />} />
                             <Route path="/rake-report" element={<RakeReport />} />
                             <Route path="/dealers" element={<Dealers />} />
+                            <Route path="/marketing" element={<MarketingReport />} />
                             <Route
                                 path="/pontuacao"
                                 element={

@@ -6,12 +6,15 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, Request, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Config
 JWT_SECRET = os.environ.get("JWT_SECRET", "change-me")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 8
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.environ.get("DB_NAME", "pokerhome")
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]

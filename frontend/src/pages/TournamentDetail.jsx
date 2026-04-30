@@ -147,7 +147,7 @@ export default function TournamentDetail() {
     useEffect(() => {
         const t = setTimeout(async () => {
             const { data } = await api.get(`/players${search ? `?q=${encodeURIComponent(search)}` : ""}`);
-            setPlayers(data.slice(0, 50));
+            setPlayers(data.items?.slice(0, 50) || []);
         }, 200);
         return () => clearTimeout(t);
     }, [search]);

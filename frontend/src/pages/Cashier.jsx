@@ -32,7 +32,11 @@ export default function Cashier() {
             api.get("/players"),
             api.get("/cashier/unpaid-prizes"),
         ]);
-        setPending(a.data); setDebtors(b.data); setTransactions(c.data); setPlayers(d.data); setPrizes(e.data);
+        setPending(a.data); 
+        setDebtors(b.data); 
+        setTransactions(c.data.items || c.data); 
+        setPlayers(d.data.items || d.data); 
+        setPrizes(e.data);
     };
     useEffect(() => { load(); }, []);
 

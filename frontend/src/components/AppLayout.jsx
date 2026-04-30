@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
     LayoutDashboard, Trophy, Users, BarChart3, Wallet, Spade,
-    Settings2, LogOut, Menu, X, Diamond, ShieldCheck, FileText
+    Settings2, LogOut, Menu, X, Diamond, ShieldCheck, FileText, Megaphone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 const NAV = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/torneios", label: "Torneios", icon: Trophy },
+    { to: "/marketing", label: "Marketing", icon: Megaphone },
     { to: "/jogadores", label: "Jogadores", icon: Users },
     { to: "/ranking", label: "Ranking", icon: BarChart3 },
     { to: "/caixa", label: "Caixa", icon: Wallet },

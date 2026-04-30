@@ -21,7 +21,7 @@ export default function Players() {
 
     const load = async () => {
         const { data } = await api.get(`/players${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-        setPlayers(data);
+        setPlayers(data.items || data);
     };
 
     useEffect(() => {

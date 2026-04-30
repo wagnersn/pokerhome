@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from auth_utils import get_current_user, require_admin, db, gen_id, iso, now_utc
 from models import CashTableIn, CashTableOut, CashTableSummary
 from typing import List
