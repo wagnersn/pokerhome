@@ -68,6 +68,10 @@ class CashTableIn(BaseModel):
     blinds: str
     min_buyin: float
     max_buyin: float
+    rake_percent: float = 5.0
+    rake_cap: float = 0.0
+    jackpot_percent: float = 2.0
+    jackpot_cap: float = 0.0
 
 class PointRule(BaseModel):
     position: int

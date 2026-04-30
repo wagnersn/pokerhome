@@ -6,9 +6,25 @@ from models import PlayerIn
 router = APIRouter(prefix="/players", tags=["Players"])
 
 @router.get("")
-async def list_players(_: dict = Depends(get_current_user)):
-    players = await db.players.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
-    return players
+async def list_players(
+    page: int = 1, 
+    limit: int = 50, 
+    q: str = None,
+    _: dict = Depends(get_current_user)
+):
+    skip = (page - 1) * limit
+    query = {}
+    if q:
+        query["name"] = {"$regex": q, "$options": "i"}
+    
+    items = await db.players.find(query, {"_id": 0})\
+        .sort("name", 1)\
+        .skip(skip)\
+        .limit(limit)\
+        .to_list(limit)
+    
+    total = await db.players.count_documents(query)
+    return {"items": items, "total": total, "page": page, "limit": limit}
 
 @router.post("")
 async def create_player(body: PlayerIn, _: dict = Depends(get_current_user)):
