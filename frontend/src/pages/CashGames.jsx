@@ -587,7 +587,7 @@ export default function CashGames() {
                     <div className="text-sm text-muted-foreground mb-1">
                         Mesa: <strong>{manualRakeOpen?.name}</strong>
                     </div>
-                        <div className="space-y-4">
+                    <form onSubmit={confirmManualRake} className="space-y-4">
                             <div className="space-y-1.5">
                                 <Label className="text-xs uppercase tracking-widest text-muted-foreground">Dealer Responsável</Label>
                                 <select 

@@ -284,6 +284,8 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+from routers import players, dealers
+
 # ---------- App / router ----------
 app = FastAPI(title="Casa de Poker API", version="1.0.0")
 api = APIRouter(prefix="/api")
@@ -1713,9 +1715,8 @@ async def dashboard_revenue(days: int = 7, _: dict = Depends(get_current_user)):
 
 
 # ---------- Mount ----------
-from routers import players, dealers
-app.include_router(players.router)
-app.include_router(dealers.router)
+api.include_router(players.router)
+api.include_router(dealers.router)
 app.include_router(api)
 
 _cors = os.environ.get("CORS_ORIGINS", "").strip()
