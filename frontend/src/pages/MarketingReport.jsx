@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import { fmtBRL, fmtDateTime, apiErr, fmtNumber } from "@/lib/format";
 import { Trophy, Users, Megaphone, Calendar, TrendingUp, DollarSign, Target, ArrowUpRight } from "lucide-react";
@@ -11,7 +11,7 @@ export default function MarketingReport() {
     const [days, setDays] = useState(30);
     const [loading, setLoading] = useState(true);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         try {
             const res = await api.get(`/tournaments/stats/marketing?days=${days}`);
@@ -21,11 +21,11 @@ export default function MarketingReport() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [days]);
 
     useEffect(() => {
         load();
-    }, [days]);
+    }, [load]);
 
     if (!data && loading) return <div className="p-10 text-center animate-pulse text-muted-foreground">Carregando estatísticas...</div>;
 

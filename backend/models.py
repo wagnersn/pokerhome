@@ -77,9 +77,11 @@ class WaitlistIn(BaseModel):
 
 class CashTableIn(BaseModel):
     name: str
-    blinds: str
-    min_buyin: float
-    max_buyin: float
+    game_type: str = "Texas Hold'em"
+    small_blind: float
+    big_blind: float
+    max_seats: int = 9
+    bb_on_button: bool = False
     rake_percent: float = 5.0
     rake_cap: float = 0.0
     jackpot_percent: float = 2.0
