@@ -49,7 +49,8 @@ class PrizeDistributionIn(BaseModel):
     distribution: List[PrizeDistItem]
 
 class TransactionIn(BaseModel):
-    player_id: str
+    player_id: Optional[str] = None
+    dealer_id: Optional[str] = None
     type: Literal["manual_in", "manual_out", "debt_payment", "cash_chip_sale", "expense"]
     amount: float
     payment_method: Literal["cash", "pix"]
@@ -75,3 +76,12 @@ class PointRule(BaseModel):
 class PointStructureIn(BaseModel):
     name: str
     rules: List[PointRule]
+
+class DealerIn(BaseModel):
+    name: str
+    active: bool = True
+
+class DealerPaymentIn(BaseModel):
+    amount: float
+    payment_method: Literal["cash", "pix"]
+    description: Optional[str] = None

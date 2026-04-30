@@ -19,6 +19,7 @@ import CashGames from "@/pages/CashGames";
 import PointStructures from "@/pages/PointStructures";
 import Users from "@/pages/Users";
 import RakeReport from "@/pages/RakeReport";
+import Dealers from "@/pages/Dealers";
 
 function App() {
     return (
@@ -44,6 +45,7 @@ function App() {
                             <Route path="/caixa" element={<Cashier />} />
                             <Route path="/cash-games" element={<CashGames />} />
                             <Route path="/rake-report" element={<RakeReport />} />
+                            <Route path="/dealers" element={<Dealers />} />
                             <Route
                                 path="/pontuacao"
                                 element={

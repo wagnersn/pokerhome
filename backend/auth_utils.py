@@ -73,3 +73,7 @@ def get_client_ip(request: Request) -> str:
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+def gen_id() -> str:
+    import uuid
+    return str(uuid.uuid4())

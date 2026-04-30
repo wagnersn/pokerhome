@@ -17,6 +17,7 @@ const NAV = [
     { to: "/caixa", label: "Caixa", icon: Wallet },
     { to: "/cash-games", label: "Cash Games", icon: Spade },
     { to: "/rake-report", label: "Relatório Rake", icon: FileText },
+    { to: "/dealers", label: "Equipe (Dealers)", icon: Users },
 ];
 
 const ADMIN_NAV = [

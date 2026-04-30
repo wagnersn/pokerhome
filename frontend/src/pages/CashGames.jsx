@@ -40,7 +40,8 @@ export default function CashGames() {
     const [jackpotOpen, setJackpotOpen] = useState(false);
     const [jackpotForm, setJackpotForm] = useState({ amount: "", desc: "Ajuste Manual" });
     const [manualRakeOpen, setManualRakeOpen] = useState(null);
-    const [manualRakeForm, setManualRakeForm] = useState({ rake: "", jackpot: "", notes: "" });
+    const [manualRakeForm, setManualRakeForm] = useState({ rake: "", jackpot: "", notes: "", dealer_id: "" });
+    const [dealers, setDealers] = useState([]);
 
     const loadSeated = async (tid) => {
         try {
@@ -51,14 +52,16 @@ export default function CashGames() {
 
     const load = useCallback(async () => {
         try {
-            const [tablesRes, playersRes, jackpotRes] = await Promise.all([
+            const [tablesRes, playersRes, jackpotRes, dealersRes] = await Promise.all([
                 api.get("/cash-tables"),
                 api.get("/players"),
-                api.get("/jackpot")
+                api.get("/jackpot"),
+                api.get("/dealers")
             ]);
             setTables(tablesRes.data);
             setPlayers(playersRes.data);
             setJackpotBalance(jackpotRes.data.balance || 0);
+            setDealers(dealersRes.data.filter(d => d.active));
             const wls = {};
             await Promise.all(tablesRes.data.map(async (tt) => {
                 const { data } = await api.get(`/cash-tables/${tt.id}/waitlist`);
@@ -155,11 +158,12 @@ export default function CashGames() {
                 rake: Number(manualRakeForm.rake) || 0,
                 jackpot: Number(manualRakeForm.jackpot) || 0,
                 table_name: manualRakeOpen.name,
-                notes: manualRakeForm.notes
+                notes: manualRakeForm.notes,
+                dealer_id: manualRakeForm.dealer_id
             });
             toast.success("Rake lançado com sucesso");
             setManualRakeOpen(null);
-            setManualRakeForm({ rake: "", jackpot: "", notes: "" });
+            setManualRakeForm({ rake: "", jackpot: "", notes: "", dealer_id: "" });
             load();
         } catch (e) { toast.error(apiErr(e)); }
     };
@@ -583,8 +587,22 @@ export default function CashGames() {
                     <div className="text-sm text-muted-foreground mb-1">
                         Mesa: <strong>{manualRakeOpen?.name}</strong>
                     </div>
-                    <form onSubmit={confirmManualRake} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-widest text-muted-foreground">Dealer Responsável</Label>
+                                <select 
+                                    required
+                                    value={manualRakeForm.dealer_id}
+                                    onChange={(e) => setManualRakeForm({ ...manualRakeForm, dealer_id: e.target.value })}
+                                    className="w-full bg-surface-elevated border border-white/10 rounded-md h-10 px-3 text-sm"
+                                >
+                                    <option value="">Selecione o dealer...</option>
+                                    {dealers.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label className="text-xs uppercase tracking-widest text-muted-foreground">Rake (R$)</Label>
                                 <Input

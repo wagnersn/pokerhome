@@ -52,8 +52,7 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def gen_id() -> str:
-    return str(uuid.uuid4())
+from auth_utils import now_utc, iso, get_client_ip, gen_id
 
 
 def hash_password(pw: str) -> str:
@@ -1040,12 +1039,14 @@ async def record_manual_rake(payload: dict = Body(...), _: dict = Depends(requir
     jackpot = float(payload.get("jackpot", 0))
     table_name = payload.get("table_name", "Geral")
     notes = payload.get("notes", "")
+    dealer_id = payload.get("dealer_id")
     
     if rake > 0:
         await db.transactions.insert_one({
             "id": gen_id(),
             "type": "income",
             "amount": rake,
+            "dealer_id": dealer_id,
             "description": f"Rake Manual: {table_name} {notes}".strip(),
             "created_at": iso(now_utc()),
         })
@@ -1054,6 +1055,7 @@ async def record_manual_rake(payload: dict = Body(...), _: dict = Depends(requir
             "id": gen_id(),
             "type": "income",
             "amount": jackpot,
+            "dealer_id": dealer_id,
             "description": f"Jackpot Manual: {table_name} {notes}".strip(),
             "created_at": iso(now_utc()),
         })
@@ -1619,6 +1621,8 @@ async def dashboard_summary(_: dict = Depends(get_current_user)):
             manual_adj += amt
         elif ttype == "manual_out":
             manual_adj -= amt
+        elif ttype == "expense":
+            manual_adj -= amt
             
     revenue_today = tour_rake + cash_rake + manual_adj
     
@@ -1709,6 +1713,9 @@ async def dashboard_revenue(days: int = 7, _: dict = Depends(get_current_user)):
 
 
 # ---------- Mount ----------
+from routers import players, dealers
+app.include_router(players.router)
+app.include_router(dealers.router)
 app.include_router(api)
 
 _cors = os.environ.get("CORS_ORIGINS", "").strip()
