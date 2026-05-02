@@ -53,14 +53,14 @@ async def tournament_marketing_stats(days: int = 30, _: dict = Depends(get_curre
         "history": history
     }
 
-@router.get("/", response_model=List[TournamentOut])
+@router.get("", response_model=List[TournamentOut])
 async def list_tournaments(status: Optional[str] = None, _: dict = Depends(get_current_user)):
     query = {}
     if status: query["status"] = status
     docs = await db.tournaments.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [TournamentOut(**d) for d in docs]
 
-@router.post("/", response_model=TournamentOut)
+@router.post("", response_model=TournamentOut)
 async def create_tournament(body: TournamentIn, _: dict = Depends(require_admin)):
     doc = {
         "id": gen_id(),

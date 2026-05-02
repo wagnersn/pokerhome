@@ -11,7 +11,7 @@ from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Respons
 from starlette.middleware.cors import CORSMiddleware
 
 from auth_utils import db, client, get_current_user, require_admin, iso, now_utc, gen_id
-from routers import auth, players, tournaments, cashier, cash_tables, dealers, ranking, dashboard, point_structures
+from routers import auth, players, tournaments, cashier, cash_tables, dealers, ranking, dashboard, point_structures, bar, users
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -28,6 +28,9 @@ async def on_startup():
     await db.players.create_index("name")
     await db.tournaments.create_index("id", unique=True)
     await db.login_attempts.create_index("created_at", expireAfterSeconds=1800)
+    await db.products.create_index("id", unique=True)
+    await db.sales.create_index("id", unique=True)
+    await db.sales.create_index("created_at")
     
     # Default admin if none
     if await db.users.count_documents({}) == 0:
@@ -59,6 +62,8 @@ api.include_router(dealers.router)
 api.include_router(ranking.router)
 api.include_router(dashboard.router)
 api.include_router(point_structures.router)
+api.include_router(bar.router)
+api.include_router(users.router)
 app.include_router(api)
 
 # ---------- CORS ----------

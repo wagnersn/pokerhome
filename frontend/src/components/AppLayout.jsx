@@ -4,7 +4,8 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
     LayoutDashboard, Trophy, Users, BarChart3, Wallet, Spade,
-    Settings2, LogOut, Menu, X, Diamond, ShieldCheck, FileText, Megaphone
+    Settings2, LogOut, Menu, X, Diamond, ShieldCheck, FileText, Megaphone,
+    ShoppingCart, Package
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ const NAV = [
     { to: "/jogadores", label: "Jogadores", icon: Users },
     { to: "/ranking", label: "Ranking", icon: BarChart3 },
     { to: "/caixa", label: "Caixa", icon: Wallet },
+    { to: "/copa", label: "Copa / Bar", icon: ShoppingCart },
     { to: "/cash-games", label: "Cash Games", icon: Spade },
     { to: "/rake-report", label: "Relatório Rake", icon: FileText },
     { to: "/dealers", label: "Equipe (Dealers)", icon: Users },
@@ -23,6 +25,7 @@ const NAV = [
 
 const ADMIN_NAV = [
     { to: "/pontuacao", label: "Pontuação", icon: Diamond },
+    { to: "/estoque", label: "Estoque", icon: Package },
     { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
 ];
 

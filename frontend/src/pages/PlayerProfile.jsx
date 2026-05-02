@@ -97,20 +97,45 @@ export default function PlayerProfile() {
                             </div>
                         ))}
                     </div>
+
+                    <h3 className="font-heading text-lg font-semibold mb-4 mt-8">Consumo Copa</h3>
+                    <div className="space-y-2">
+                        {(data.sales || []).length === 0 && <div className="text-sm text-muted-foreground">Sem consumo registrado.</div>}
+                        {(data.sales || []).map((s) => (
+                            <div key={s.id} className="rounded-lg p-3 bg-surface-elevated border border-white/5">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="font-semibold truncate">
+                                            {s.items.map(i => `${i.quantity}x ${i.product_name}`).join(", ")}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {fmtDateTime(s.created_at)} · 
+                                            <span className={`ml-1 uppercase font-bold ${s.payment_method === 'debt' ? 'text-orange-500' : 'text-emerald-500'}`}>
+                                                {s.payment_method === 'debt' ? 'Fiado (Comanda)' : s.payment_method}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-mono font-bold text-white">{fmtBRL(s.total_amount)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                <div className="rounded-2xl bg-surface border border-white/5 p-6">
-                    <h3 className="font-heading text-lg font-semibold mb-4">Transações</h3>
+                <div className="rounded-2xl bg-surface border border-white/5 p-6 h-fit">
+                    <h3 className="font-heading text-lg font-semibold mb-4">Transações e Pagamentos</h3>
                     <div className="space-y-2">
-                        {transactions.length === 0 && <div className="text-sm text-muted-foreground">Sem transações ainda.</div>}
-                        {transactions.slice(0, 20).map((t) => (
+                        {(transactions || []).length === 0 && <div className="text-sm text-muted-foreground">Sem transações ainda.</div>}
+                        {(transactions || []).slice(0, 20).map((t) => (
                             <div key={t.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                                 <div className="min-w-0">
                                     <div className="text-sm font-medium truncate">{t.description || t.type}</div>
                                     <div className="text-xs text-muted-foreground">{fmtDateTime(t.created_at)} · {t.payment_method}</div>
                                 </div>
-                                <div className={`font-mono text-sm ${t.type === "debt_payment" || t.type === "manual_in" ? "text-success" : t.type === "debt_added" ? "text-destructive" : ""}`}>
-                                    {t.type === "debt_payment" ? "−" : t.type === "debt_added" ? "+" : ""}{fmtBRL(t.amount)}
+                                <div className={`font-mono text-sm ${t.type === "debt_payment" || t.type === "manual_in" ? "text-emerald-500" : "text-destructive"}`}>
+                                    {t.type === "debt_payment" ? "−" : t.type === "manual_in" ? "+" : ""}{fmtBRL(t.amount)}
                                 </div>
                             </div>
                         ))}

@@ -5,11 +5,11 @@ from typing import List
 
 router = APIRouter(prefix="/dealers", tags=["Dealers"])
 
-@router.get("/")
+@router.get("")
 async def list_dealers(_: dict = Depends(get_current_user)):
     return await db.dealers.find({}, {"_id": 0}).to_list(100)
 
-@router.post("/")
+@router.post("")
 async def save_dealer(data: DealerIn, _: dict = Depends(require_admin)):
     did = gen_id()
     await db.dealers.insert_one({

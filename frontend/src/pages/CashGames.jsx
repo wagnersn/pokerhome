@@ -55,7 +55,7 @@ export default function CashGames() {
             const [tablesRes, playersRes, jackpotRes, dealersRes] = await Promise.all([
                 api.get("/cash-tables"),
                 api.get("/players"),
-                api.get("/jackpot"),
+                api.get("/cashier/jackpot"),
                 api.get("/dealers")
             ]);
             setTables(tablesRes.data);
@@ -101,7 +101,7 @@ export default function CashGames() {
         if (t.status === "open") {
             try {
                 const { data } = await api.get(`/cash-tables/${t.id}/summary`);
-                setCloseForm({ rake: data.suggested_rake, jackpot: data.suggested_jackpot, total_collected: data.total_collected });
+                setCloseForm({ rake: Math.max(0, data.suggested_rake), jackpot: Math.max(0, data.suggested_jackpot), total_collected: data.total_collected, total_buyin: data.total_buyin, total_cashout: data.total_cashout });
                 setCloseTableOpen(t);
             } catch (e) { toast.error(apiErr(e)); }
         } else {
@@ -132,7 +132,7 @@ export default function CashGames() {
     const confirmCashout = async (e) => {
         e.preventDefault();
         try {
-            await api.post(`/waitlist/${cashoutOpen.id}/cashout?amount=${cashoutForm.amount}&method=${cashoutForm.method}`);
+            await api.post(`/cash-tables/waitlist/${cashoutOpen.id}/cashout?amount=${cashoutForm.amount}&method=${cashoutForm.method}`);
             toast.success("Acerto realizado com sucesso");
             setCashoutOpen(null);
             if (activeTable) loadSeated(activeTable.id);
@@ -143,7 +143,7 @@ export default function CashGames() {
     const confirmJackpot = async (e) => {
         e.preventDefault();
         try {
-            await api.post(`/jackpot/adjust?amount=${jackpotForm.amount}&description=${encodeURIComponent(jackpotForm.desc)}`);
+            await api.post(`/cashier/jackpot/adjust?amount=${jackpotForm.amount}&description=${encodeURIComponent(jackpotForm.desc)}`);
             toast.success("Jackpot atualizado");
             setJackpotOpen(false);
             setJackpotForm({ amount: "", desc: "Ajuste Manual" });
@@ -191,7 +191,7 @@ export default function CashGames() {
 
     const updateWait = async (wid, status, amount = 0, method = "debt") => {
         try {
-            await api.post(`/waitlist/${wid}/status?status=${status}&amount=${amount}&method=${method}`);
+            await api.post(`/cash-tables/waitlist/${wid}/status?status=${status}&amount=${amount}&method=${method}`);
             load();
         } catch (e) { toast.error(apiErr(e)); }
     };
@@ -203,6 +203,8 @@ export default function CashGames() {
         toast.success("Jogador sentado na mesa");
         setSeatOpen(null);
         setSeatForm({ amount: "", method: "debt" });
+        // Recarrega a lista de jogadores sentados no modal de detalhe
+        if (activeTable) loadSeated(activeTable.id);
     };
 
     return (
@@ -546,14 +548,26 @@ export default function CashGames() {
                     <form onSubmit={confirmCloseTable} className="space-y-4">
                         <div className="bg-surface-elevated p-4 rounded-xl border border-white/5 space-y-2 mb-4">
                             <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Arrecadação Bruta:</span>
-                                <span className="font-mono font-bold text-foreground">{fmtBRL(closeForm.total_collected)}</span>
+                                <span className="text-muted-foreground">Total Buy-ins:</span>
+                                <span className="font-mono font-bold text-success">{fmtBRL(closeForm.total_buyin || 0)}</span>
                             </div>
-                            <div className="text-[10px] text-muted-foreground text-center">
-                                (Total de Buy-ins menos Total de Cashouts)
+                            <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Total Cashouts:</span>
+                                <span className="font-mono font-bold text-destructive">{fmtBRL(closeForm.total_cashout || 0)}</span>
                             </div>
+                            <div className="pt-2 border-t border-white/10 flex justify-between text-sm font-bold">
+                                <span>Saldo da Mesa:</span>
+                                <span className={`font-mono ${(closeForm.total_collected || 0) >= 0 ? "text-foreground" : "text-destructive"}`}>
+                                    {fmtBRL(closeForm.total_collected || 0)}
+                                </span>
+                            </div>
+                            {(closeForm.total_collected || 0) < 0 && (
+                                <div className="text-[10px] text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-2 text-center">
+                                    ⚠️ Saldo negativo: cashouts excedem buy-ins. Verifique os lançamentos antes de fechar.
+                                </div>
+                            )}
                         </div>
-                        
+
                         <div className="space-y-1.5">
                             <Label className="text-xs uppercase tracking-widest text-muted-foreground">Rake da Casa</Label>
                             <Input
@@ -570,7 +584,7 @@ export default function CashGames() {
                                 className="bg-surface-elevated border-white/10 font-mono"
                             />
                         </div>
-                        
+
                         <DialogFooter className="mt-4">
                             <Button type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full">Confirmar Fechamento</Button>
                         </DialogFooter>

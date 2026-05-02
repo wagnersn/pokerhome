@@ -96,7 +96,9 @@ class CashTableOut(CashTableIn):
     created_at: str
 
 class CashTableSummary(BaseModel):
-    total_collected: float
+    total_buyin: float
+    total_cashout: float
+    total_collected: float   # buy-ins - cashouts (always >= 0 for rake purposes)
     suggested_rake: float
     suggested_jackpot: float
 
@@ -142,4 +144,38 @@ class EntryOut(BaseModel):
     final_position: Optional[int] = None
     prize: float = 0.0
     points: float = 0.0
+    created_at: str
+
+class ProductIn(BaseModel):
+    name: str
+    category: str  # e.g., "Bebida", "Salgado", "Janta", "Guloseima"
+    buy_price: float
+    sell_price: float
+    stock: int = 0
+    min_stock: int = 0
+    image_url: Optional[str] = None
+    active: bool = True
+
+class ProductOut(ProductIn):
+    id: str
+    created_at: str
+
+class SaleItem(BaseModel):
+    product_id: str
+    product_name: str
+    quantity: int
+    unit_price: float
+    total_price: float
+
+class SaleIn(BaseModel):
+    items: List[SaleItem]
+    total_amount: float
+    payment_method: Literal["cash", "pix", "debt"]
+    player_id: Optional[str] = None # Optional: link sale to a player (debt)
+    notes: Optional[str] = None
+
+class SaleOut(SaleIn):
+    id: str
+    operator_id: str
+    operator_name: str
     created_at: str

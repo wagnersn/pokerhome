@@ -72,14 +72,22 @@ async def player_profile(player_id: str, _: dict = Depends(get_current_user)):
             "result": cashout - buyin
         })
 
+    transactions = await db.transactions.find({"player_id": player_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    sales = await db.sales.find({"player_id": player_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
     return {
         "player": p,
         "entries": entries,
         "cash_sessions": cash_sessions,
+        "transactions": transactions,
+        "sales": sales,
         "stats": {
-            "total_tournaments": len(entries),
-            "total_itm": sum(1 for e in entries if e.get("final_position") and e["final_position"] <= 9),
-            "total_spent": sum(e.get("total_spent", 0) for e in entries),
+            "total_entries": len(entries),
+            "total_spent": sum(e.get("total_spent", 0) for e in entries) + sum(s.get("total_amount", 0) for s in sales),
+            "total_won": sum(e.get("prize", 0) for e in entries),
+            "total_points": sum(e.get("points", 0) for e in entries),
+            "debt_balance": p.get("debt_balance", 0.0),
+            "roi": sum(e.get("prize", 0) for e in entries) - sum(e.get("total_spent", 0) for e in entries),
             "total_cash_buyin": sum(s["buyin"] for s in cash_sessions),
             "total_cash_out": sum(s["cashout"] for s in cash_sessions),
         }

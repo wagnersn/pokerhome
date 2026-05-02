@@ -5,11 +5,11 @@ from typing import List
 
 router = APIRouter(prefix="/cash-tables", tags=["Cash Tables"])
 
-@router.get("/", response_model=List[CashTableOut])
+@router.get("", response_model=List[CashTableOut])
 async def list_tables(_: dict = Depends(get_current_user)):
     return await db.cash_tables.find({}, {"_id": 0}).to_list(100)
 
-@router.post("/", response_model=CashTableOut)
+@router.post("", response_model=CashTableOut)
 async def create_table(body: CashTableIn, _: dict = Depends(require_admin)):
     doc = {
         "id": gen_id(),
@@ -56,15 +56,17 @@ async def get_table_summary(tid: str, _: dict = Depends(get_current_user)):
     charges = await db.charges.find({"table_id": tid, "created_at": {"$gte": t.get("opened_at") or ""}}).to_list(1000)
     bi = sum(float(c["amount"]) for c in charges if c["type"] == "cash_buyin")
     co = sum(float(c["amount"]) for c in charges if c["type"] == "cash_cashout")
-    balance = bi - co
-    
+    balance_raw = bi - co
+    # O rake só pode ser calculado sobre saldo positivo (o que ficou na casa)
+    balance = max(0.0, balance_raw)
+
     rp = t.get("rake_percent", 5.0)
     rc = t.get("rake_cap", 0.0)
     jp = t.get("jackpot_percent", 2.0)
     jc = t.get("jackpot_cap", 0.0)
-    
+
     total_percent = rp + jp
-    if total_percent > 0:
+    if total_percent > 0 and balance > 0:
         proj_rake = balance * (rp / total_percent)
         proj_jack = balance * (jp / total_percent)
     else:
@@ -73,9 +75,11 @@ async def get_table_summary(tid: str, _: dict = Depends(get_current_user)):
 
     if rc > 0: proj_rake = min(proj_rake, rc)
     if jc > 0: proj_jack = min(proj_jack, jc)
-    
+
     return CashTableSummary(
-        total_collected=balance,
+        total_buyin=round(bi, 2),
+        total_cashout=round(co, 2),
+        total_collected=round(balance_raw, 2),
         suggested_rake=round(proj_rake, 2),
         suggested_jackpot=round(proj_jack, 2)
     )
@@ -149,7 +153,28 @@ async def close_table(tid: str, payload: dict = Body(...), _: dict = Depends(req
 
 @router.get("/{tid}/seated")
 async def get_seated_players(tid: str, _: dict = Depends(get_current_user)):
-    return await db.waitlist.find({"table_id": tid, "status": "seated"}, {"_id": 0}).to_list(100)
+    seated = await db.waitlist.find({"table_id": tid, "status": "seated"}, {"_id": 0}).to_list(100)
+    if not seated:
+        return []
+    # Enrich each player with aggregated buy-in and cashout from charges
+    session_ids = [p["id"] for p in seated]
+    charges = await db.charges.find({"session_id": {"$in": session_ids}}, {"_id": 0}).to_list(5000)
+    # Build lookup: session_id -> {total_buyin, total_cashout}
+    totals = {}
+    for c in charges:
+        sid = c.get("session_id")
+        if sid not in totals:
+            totals[sid] = {"total_buyin": 0.0, "total_cashout": 0.0}
+        if c.get("type") == "cash_buyin":
+            totals[sid]["total_buyin"] += float(c.get("amount", 0))
+        elif c.get("type") == "cash_cashout":
+            totals[sid]["total_cashout"] += float(c.get("amount", 0))
+    # Attach totals to each player
+    for p in seated:
+        t = totals.get(p["id"], {"total_buyin": 0.0, "total_cashout": 0.0})
+        p["total_buyin"] = round(t["total_buyin"], 2)
+        p["total_cashout"] = round(t["total_cashout"], 2)
+    return seated
 
 @router.post("/{tid}/seat")
 async def seat_player(tid: str, delta: int = Query(1), _: dict = Depends(get_current_user)):

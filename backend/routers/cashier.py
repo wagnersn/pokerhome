@@ -111,6 +111,52 @@ async def get_jackpot(_: dict = Depends(get_current_user)):
     res = await db.settings.find_one({"id": "global_jackpot"}, {"_id": 0})
     return res or {"id": "global_jackpot", "balance": 0.0}
 
+@router.post("/jackpot/adjust")
+async def adjust_jackpot(amount: float = Query(...), description: str = Query("Ajuste Manual"), _: dict = Depends(require_admin)):
+    await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": amount}}, upsert=True)
+    await db.transactions.insert_one({
+        "id": gen_id(),
+        "type": "jackpot_in" if amount >= 0 else "manual_out",
+        "amount": abs(amount),
+        "payment_method": "cash",
+        "description": description,
+        "created_at": iso(now_utc()),
+    })
+    res = await db.settings.find_one({"id": "global_jackpot"}, {"_id": 0})
+    return res or {"id": "global_jackpot", "balance": 0.0}
+
+@router.post("/rake/manual")
+async def manual_rake(payload: dict = Body(...), _: dict = Depends(require_admin)):
+    rake = float(payload.get("rake", 0))
+    jackpot = float(payload.get("jackpot", 0))
+    table_name = payload.get("table_name", "Mesa Cash")
+    notes = payload.get("notes", "")
+    dealer_id = payload.get("dealer_id", None)
+    desc_suffix = f" ({notes})" if notes else ""
+
+    if rake > 0:
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "income",
+            "amount": rake,
+            "dealer_id": dealer_id,
+            "payment_method": "cash",
+            "description": f"Rake Manual: {table_name}{desc_suffix}",
+            "created_at": iso(now_utc()),
+        })
+    if jackpot > 0:
+        await db.settings.update_one({"id": "global_jackpot"}, {"$inc": {"balance": jackpot}}, upsert=True)
+        await db.transactions.insert_one({
+            "id": gen_id(),
+            "type": "jackpot_in",
+            "amount": jackpot,
+            "dealer_id": dealer_id,
+            "payment_method": "cash",
+            "description": f"Jackpot Manual: {table_name}{desc_suffix}",
+            "created_at": iso(now_utc()),
+        })
+    return {"ok": True, "rake": rake, "jackpot": jackpot}
+
 @router.get("/rake/history")
 async def rake_history(days: int = 30, _: dict = Depends(get_current_user)):
     now = now_utc()

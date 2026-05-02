@@ -21,6 +21,8 @@ import Users from "@/pages/Users";
 import RakeReport from "@/pages/RakeReport";
 import Dealers from "@/pages/Dealers";
 import MarketingReport from "@/pages/MarketingReport";
+import Bar from "@/pages/Bar";
+import Inventory from "@/pages/Inventory";
 
 function App() {
     return (
@@ -48,6 +50,8 @@ function App() {
                             <Route path="/rake-report" element={<RakeReport />} />
                             <Route path="/dealers" element={<Dealers />} />
                             <Route path="/marketing" element={<MarketingReport />} />
+                            <Route path="/copa" element={<Bar />} />
+                            <Route path="/estoque" element={<Inventory />} />
                             <Route
                                 path="/pontuacao"
                                 element={

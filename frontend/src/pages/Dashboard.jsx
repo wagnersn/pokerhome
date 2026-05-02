@@ -4,7 +4,7 @@ import { fmtBRL, fmtNumber } from "@/lib/format";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart,
 } from "recharts";
-import { Coins, Users2, Spade, Trophy, AlertTriangle, ReceiptText } from "lucide-react";
+import { Coins, Users2, Spade, Trophy, AlertTriangle, ReceiptText, ShoppingCart } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Stat = ({ icon: Icon, label, value, sub, accent = "primary", testid }) => (
@@ -52,10 +52,10 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-                <Stat testid="stat-revenue" icon={Coins} label="Receita Hoje" value={fmtBRL(summary?.revenue_today ?? 0)} sub="Rake arrecadado" />
-                <Stat testid="stat-active-players" icon={Users2} label="Jogadores Ativos" value={fmtNumber(summary?.active_players ?? 0)} sub={`${summary?.total_players ?? 0} cadastrados`} />
-                <Stat testid="stat-tables" icon={Spade} label="Mesas Cash Abertas" value={fmtNumber(summary?.open_tables ?? 0)} />
-                <Stat testid="stat-tournaments" icon={Trophy} label="Torneios em Andamento" value={fmtNumber(summary?.ongoing_tournaments ?? 0)} />
+                <Stat testid="stat-rake" icon={Trophy} label="Rake Hoje" value={fmtBRL(summary?.rake_today ?? 0)} sub="Torneios + Cash" />
+                <Stat testid="stat-bar" icon={ShoppingCart} label="Vendas Copa" value={fmtBRL(summary?.bar_revenue_today ?? 0)} accent="emerald" sub="Faturamento bar" />
+                <Stat testid="stat-revenue" icon={Coins} label="Receita Total" value={fmtBRL(summary?.revenue_today ?? 0)} accent="success" sub="Rake + Copa" />
+                <Stat testid="stat-active-players" icon={Users2} label="Jogadores Ativos" value={fmtNumber(summary?.total_players ?? 0)} sub="Total cadastrados" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -63,17 +63,24 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-4">
                         <div>
                             <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Últimos 7 dias</div>
-                            <div className="font-heading text-xl font-semibold mt-1">Receita Diária</div>
+                            <div className="font-heading text-xl font-semibold mt-1">Receita Detalhada</div>
                         </div>
-                        <div className="text-sm text-muted-foreground font-mono">{fmtBRL(revenue.reduce((s, r) => s + r.revenue, 0))}</div>
+                        <div className="text-right">
+                             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Total Período</div>
+                             <div className="font-heading text-lg font-bold text-white">{fmtBRL(revenue.reduce((s, r) => s + r.revenue, 0))}</div>
+                        </div>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%" minHeight={288}>
                             <AreaChart data={revenue}>
                                 <defs>
-                                    <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="hsl(43, 65%, 53%)" stopOpacity={0.5} />
+                                    <linearGradient id="rakeGrad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="hsl(43, 65%, 53%)" stopOpacity={0.4} />
                                         <stop offset="95%" stopColor="hsl(43, 65%, 53%)" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -81,12 +88,21 @@ export default function Dashboard() {
                                 <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$${v}`} />
                                 <Tooltip
                                     contentStyle={{ background: "#12141A", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
-                                    formatter={(v) => [fmtBRL(v), "Receita"]}
+                                    formatter={(v, name) => [fmtBRL(v), name === "rake" ? "Rake" : name === "bar_revenue" ? "Vendas Copa" : "Total"]}
                                     labelFormatter={(d) => new Date(d).toLocaleDateString("pt-BR")}
                                 />
-                                <Area type="monotone" dataKey="revenue" stroke="hsl(43, 65%, 53%)" strokeWidth={2} fill="url(#goldGrad)" />
+                                <Area type="monotone" dataKey="rake" stackId="1" stroke="hsl(43, 65%, 53%)" strokeWidth={2} fill="url(#rakeGrad)" />
+                                <Area type="monotone" dataKey="bar_revenue" stackId="1" stroke="#10b981" strokeWidth={2} fill="url(#barGrad)" />
                             </AreaChart>
                         </ResponsiveContainer>
+                    </div>
+                    <div className="flex justify-center gap-6 mt-4">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="size-2 rounded-full bg-primary" /> Rake
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="size-2 rounded-full bg-emerald-500" /> Vendas Copa
+                        </div>
                     </div>
                 </div>
 
@@ -94,20 +110,20 @@ export default function Dashboard() {
                     <div className="rounded-2xl bg-surface border border-white/5 p-5">
                         <div className="flex items-center gap-2 mb-3">
                             <ReceiptText className="size-4 text-primary" />
-                            <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Caixa</div>
+                            <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Caixa Financeiro</div>
                         </div>
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <div className="text-sm text-muted-foreground">Pendente</div>
+                                <div className="text-sm text-muted-foreground">Cobranças Pendentes</div>
                                 <div className="font-mono font-semibold">{fmtBRL(summary?.pending_total ?? 0)}</div>
                             </div>
                             <div className="flex items-center justify-between">
-                                <div className="text-sm text-muted-foreground">Cobranças abertas</div>
+                                <div className="text-sm text-muted-foreground">Qtd. Pendente</div>
                                 <div className="font-mono font-semibold">{summary?.pending_count ?? 0}</div>
                             </div>
                             <div className="flex items-center justify-between pt-3 border-t border-white/5">
                                 <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                    <AlertTriangle className="size-3.5 text-destructive" /> Dívidas
+                                    <AlertTriangle className="size-3.5 text-destructive" /> Dívidas de Jogadores
                                 </div>
                                 <div className="font-mono font-semibold text-destructive">{fmtBRL(summary?.total_debt ?? 0)}</div>
                             </div>
